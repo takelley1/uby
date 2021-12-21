@@ -29,14 +29,27 @@ add_proxy_ip_and_port() {
     if [[ "${proxy_ip_and_port}" =~ [A-Za-z0-9.]+:[0-9]+ ]]; then
 
         # Add proxy IP and port to environment variables.
-        printf "\n%s\n" "-----------------------------------------------------------------"
-        printf "%s\n" "http_proxy=http://${proxy_ip_and_port}" | sudo tee /etc/profile.d/proxy.sh
-        printf "%s\n" 'https_proxy=${http_proxy}' | sudo tee -a /etc/profile.d/proxy.sh
-        printf "%s\n" 'HTTP_PROXY=${http_proxy}' | sudo tee -a /etc/profile.d/proxy.sh
-        printf "%s\n" 'HTTPS_PROXY=${http_proxy}' | sudo tee -a /etc/profile.d/proxy.sh
-        printf "%s\n\n" "-----------------------------------------------------------------"
+        # `tee` must be used here instead of redirecting stdout so we can elevate with sudo.
+        printf \
+            "%s\n%s\n%s\n%s\n" \
+            "http_proxy=http://${proxy_ip_and_port}"
+            'https_proxy=${http_proxy}'
+            'HTTP_PROXY=${http_proxy}'
+            'HTTPS_PROXY=${http_proxy}' | \
+        sudo tee /etc/profile.d/proxy.sh 1>/dev/null
+
         sudo cp -- /etc/profile.d/proxy.sh /etc/environment.d/00proxy.conf
-        # TODO: Add proxy config for apt and snap
+
+        # Add to apt configuration.
+        printf \
+            "%s\n%s\n" \
+            "Acquire::http::Proxy \"http://${proxy_ip_and_port}\";" \
+            "Acquire::https::Proxy \"http://${proxy_ip_and_port}\";" | \
+        sudo tee /etc/apt/apt.conf.d/proxy.conf 1>/dev/null
+
+        # Restart snapd to read new environment vars.
+        systemctl restart snapd
+        apt update
     else
         echo "Must use a format of IP:PORT (e.g. 10.0.0.1:3143 or myproxy.domain:8008)"
         add_proxy_ip_and_port
@@ -360,6 +373,63 @@ remove_packages() {
     fi
 }
 
+disable_services() {
+    while :; do
+        read -r -p 'Disable cups service? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            if [[ -e /lib/systemd/system/cups.service ]]; then
+                sudo systemctl disable cups.service --now
+            else
+                print "cups.service not present"
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+    while :; do
+        read -r -p 'Disable WPA supplicant service? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            if [[ -e /lib/systemd/system/wpa_supplicant.service ]]; then
+                sudo systemctl disable wpa_supplicant.service --now
+            else
+                print "wpa_supplicant.service not present"
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+    while :; do
+        read -r -p 'Disable update notifier? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            if [[ -e /etc/xdg/autostart/update-notifier.desktop ]]; then
+                echo "Hidden=true" | sudo tee -a /etc/xdg/autostart/update-notifier.desktop 1>/dev/null
+                killall update-notifier
+            else
+                print "update-notifier.desktop file not present"
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+    while :; do
+        read -r -p 'Disable pulse audio? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            if [[ -e /etc/xdg/autostart/pulseaudio.desktop ]]; then
+                echo "Hidden=true" | sudo tee -a /etc/xdg/autostart/pulseaudio.desktop 1>/dev/null
+                killall pulseaudio
+            else
+                print "pulseaudio.desktop file not present"
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+}
+
 enable_passwordless_sudo() {
     read -r -p 'Enable passwordless sudo for current user? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
@@ -447,6 +517,7 @@ install_dotfiles
 install_i3
 
 remove_packages
+disable_services
 
 enable_passwordless_sudo
 generate_ssh_key
