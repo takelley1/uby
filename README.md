@@ -1,4 +1,5 @@
 # uby
 
-- install ueberzug for ranger
-- install i3
+```bash
+curl https://raw.githubusercontent.com/takelley1/uby/main/install.sh | bash
+```
