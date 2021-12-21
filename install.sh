@@ -381,6 +381,7 @@ disable_services() {
                 sudo systemctl disable cups.service --now
             else
                 print "cups.service not present"
+            fi
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
