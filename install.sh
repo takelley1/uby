@@ -395,6 +395,7 @@ disable_services() {
                 sudo systemctl disable wpa_supplicant.service --now
             else
                 print "wpa_supplicant.service not present"
+            fi
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -409,6 +410,7 @@ disable_services() {
                 killall update-notifier
             else
                 print "update-notifier.desktop file not present"
+            fi
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -423,6 +425,7 @@ disable_services() {
                 killall pulseaudio
             else
                 print "pulseaudio.desktop file not present"
+            fi
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
