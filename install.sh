@@ -292,8 +292,7 @@ install_vim_plug() {
 
         print "Installing vim-plug"
         # From https://github.com/junegunn/vim-plug
-        sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs
-            https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+        sh -c 'curl -kfLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
         print "Done installing vim-plug"
 
     elif [[ "${response}" =~ [nN] ]]; then
