@@ -217,6 +217,14 @@ install_external_packages() {
             # From https://www.hashicorp.com/blog/announcing-the-hashicorp-linux-repository
             curl -kfsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
             sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+            
+            # Disable cert validation.
+            printf \
+                "%s\n%s\n" \
+                'Acquire::https::apt.releases.hashicorp.com::Verify-Peer "false";' \
+                'Acquire::https::apt.releases.hashicorp.com::Verify-Host "false";' | \
+            sudo tee /etc/apt/apt.conf.d/99hashicorp.conf 1>/dev/null                                        
+
             sudo apt update
             print "Done installing hashicorp repo"
             break
