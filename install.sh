@@ -241,6 +241,12 @@ install_pip_packages() {
     read -r -p 'Install pip packages? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
         print "Installing pip packages"
+
+        # Required for ueberzug
+        sudo apt install -y \
+            libx11-dev \
+            libxext-dev
+
         sudo pip3 \
             --trusted-host pypi.org \
             --trusted-host pypi.python.org \
