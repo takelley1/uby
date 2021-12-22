@@ -156,15 +156,36 @@ install_packages() {
     fi
 }
 
+install_lazygit() {
+    [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
+    curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest | \
+        awk '/https:.*Linux_x86_64\.tar\.gz/ {gsub(/"/, ""); print $2}' | \
+        sudo wget --no-check-certificate --input-file=- --output-document=/opt/lazygit/lazygit.tar.gz
+    sudo tar xzf /opt/lazygit/lazygit.tar.gz --directory=/opt/lazygit
+    sudo cp /opt/lazygit/lazygit /usr/bin/lazygit
+    print "Done installing lazygit"
+}
+
+update_lazygit_check() {
+    if hash lazygit &>/dev/null; then
+        read -r -p 'lazygit already installed. Update to latest version? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            install_lazygit
+        elif [[ "${response}" =~ [nN] ]]; then
+            return
+        else
+            echo "Enter y or n"
+            update_lazygit_check
+        fi
+    fi
+}
+
 install_external_packages() {
     while :; do
         read -r -p 'Install lazygit? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
-            # From https://github.com/jesseduffield/lazygit
-            sudo add-apt-repository ppa:lazygit-team/release
-            sudo apt update
-            sudo apt install -y lazygit
-            print "Done installing lazygit"
+            update_lazygit_check
+            install_lazygit
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
