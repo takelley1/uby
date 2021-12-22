@@ -186,6 +186,7 @@ install_external_packages() {
         if [[ "${response}" =~ [yY] ]]; then
             update_lazygit_check
             install_lazygit
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -201,6 +202,7 @@ install_external_packages() {
             sudo apt update
             sudo apt install -y hstr
             print "Done installing hstr"
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -216,6 +218,7 @@ install_external_packages() {
             sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
             sudo apt update
             print "Done installing hashicorp repo"
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -403,6 +406,7 @@ disable_services() {
             else
                 print "cups.service not present"
             fi
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -417,6 +421,7 @@ disable_services() {
             else
                 print "wpa_supplicant.service not present"
             fi
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -432,6 +437,7 @@ disable_services() {
             else
                 print "update-notifier.desktop file not present"
             fi
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
@@ -447,6 +453,7 @@ disable_services() {
             else
                 print "pulseaudio.desktop file not present"
             fi
+            break
         elif [[ "${response}" =~ [nN] ]]; then
             break
         else
