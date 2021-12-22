@@ -215,7 +215,7 @@ install_external_packages() {
         read -r -p 'Install hashicorp repo? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             # From https://www.hashicorp.com/blog/announcing-the-hashicorp-linux-repository
-            curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+            curl -kfsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
             sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
             sudo apt update
             print "Done installing hashicorp repo"
