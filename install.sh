@@ -166,7 +166,7 @@ install_lazygit() {
     print "Done installing lazygit"
 }
 
-update_lazygit_check() {
+install_lazygit_check() {
     if hash lazygit &>/dev/null; then
         read -r -p 'lazygit already installed. Update to latest version? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
@@ -175,8 +175,10 @@ update_lazygit_check() {
             return
         else
             echo "Enter y or n"
-            update_lazygit_check
+            install_lazygit_check
         fi
+    else
+        install_lazygit
     fi
 }
 
@@ -184,8 +186,7 @@ install_external_packages() {
     while :; do
         read -r -p 'Install lazygit? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
-            update_lazygit_check
-            install_lazygit
+            install_lazygit_check
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
