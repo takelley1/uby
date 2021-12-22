@@ -321,10 +321,13 @@ install_dotfiles() {
         #   overwritten to a backup directory.
         if ! git --git-dir=$HOME/.cfg/ --work-tree=$HOME checkout master; then
             [[ ! -d ~/.cfg.bak ]] && mkdir ~/.cfg.bak
+            # Must allow the git command to fail here.
+            set +e
             git --git-dir=$HOME/.cfg/ --work-tree=$HOME checkout master 2>/dev/stdout | \
                 tail -n +2 | \
                 head -n -2 | \
                 xargs mv -t ~/.cfg.bak/
+            set -e
             git --git-dir=$HOME/.cfg/ --work-tree=$HOME checkout master
         fi
         print "Done installing dotfiles"
