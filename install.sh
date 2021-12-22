@@ -32,9 +32,9 @@ add_proxy_ip_and_port() {
         # `tee` must be used here instead of redirecting stdout so we can elevate with sudo.
         printf \
             "%s\n%s\n%s\n%s\n" \
-            "http_proxy=http://${proxy_ip_and_port}"
-            'https_proxy=${http_proxy}'
-            'HTTP_PROXY=${http_proxy}'
+            "http_proxy=http://${proxy_ip_and_port}" \
+            'https_proxy=${http_proxy}' \
+            'HTTP_PROXY=${http_proxy}' \
             'HTTPS_PROXY=${http_proxy}' | \
         sudo tee /etc/profile.d/proxy.sh 1>/dev/null
 
