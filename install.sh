@@ -319,9 +319,9 @@ install_dotfiles() {
 
         # Attempt to checkout files. If not possible, move the files that would've been
         #   overwritten to a backup directory.
-        alias dot='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
-        if ! dot checkout master; then
+        if ! git --git-dir=$HOME/.cfg/ --work-tree=$HOME checkout master; then
             [[ ! -d ~/.cfg.bak ]] && mkdir ~/.cfg.bak
+            alias dot='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
             dot checkout master 2>/dev/stdout | tail -n +2 | head -n -2 | xargs mv -t ~/.cfg.bak/
             dot checkout master
         fi
