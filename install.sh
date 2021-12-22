@@ -399,10 +399,12 @@ remove_packages() {
             kerneloops \
             network-manager-pptp \
             network-manager-pptp-gnome \
+            openvpn \
             orca \
             ppp \
             pptp-linux \
             pulseaudio-module-bluetooth \
+            rygel \
             seahorse \
             sound-icons \
             speech-dispatcher \
@@ -410,10 +412,7 @@ remove_packages() {
             switcheroo-control \
             ubuntu-docs \
             whoopsie \
-            youtube-dl \
-            rygel \
-            openvpn \
-            nano
+            youtube-dl
         sudo apt autoremove -y
         print "Done removing packages"
     elif [[ "${response}" =~ [nN] ]]; then
