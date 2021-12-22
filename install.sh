@@ -241,12 +241,16 @@ install_pip_packages() {
     read -r -p 'Install pip packages? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
         print "Installing pip packages"
-        sudo pip3 install \
-            bashate \
-            ueberzug \
-            jedi \
-            reorder-python-imports \
-            molecule
+        sudo pip3 \
+            --trusted-host pypi.org \
+            --trusted-host pypi.python.org \
+            --trusted-host files.pythonhosted.org \
+            install \
+                bashate \
+                ueberzug \
+                jedi \
+                reorder-python-imports \
+                molecule
         print "Done installing pip packages"
     elif [[ "${response}" =~ [nN] ]]; then
         return
