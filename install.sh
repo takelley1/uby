@@ -96,6 +96,7 @@ install_packages() {
         sudo apt install -y \
             agrep \
             ansible \
+            apt-rdepends \
             curl \
             dash \
             feh \
@@ -155,6 +156,8 @@ install_packages() {
         install_packages
     fi
 }
+
+# TODO: Install lf, neovim stable ppa
 
 install_lazygit() {
     [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
