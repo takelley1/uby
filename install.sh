@@ -313,17 +313,17 @@ install_dotfiles() {
         fi
 
         print "Installing dotfiles"
+        git config --global http.sslVerify "false"
         cd ~ || exit 1
-        git clone --bare git@github.com:takelley1/dotfiles.git "${HOME}/.cfg"
+        git clone --bare https://github.com/takelley1/dotfiles.git "${HOME}/.cfg"
 
-        # Move original files to a backup directory so git can checkout the dotfiles.
-        print "Backing up original files"
-        mkdir ~/.cfg.bak
-        mv -v ~/.config/user-dirs.* .profile .bashrc -t ~/.cfg.bak/
-
-        # Checkout the new files.
+        # Attempt to checkout files. If not possible, move the files that would've been
+        #   overwritten to a backup directory.
         alias dot='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
-        dot checkout master
+        if ! dot checkout master; then
+            dot checkout master 2>/dev/stdout | tail -n +2 | head -n -2 | xargs mv -t ~/.cfg.bak/
+            dot checkout master
+        fi
         print "Done installing dotfiles"
 
     elif
