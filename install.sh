@@ -321,6 +321,7 @@ install_dotfiles() {
         #   overwritten to a backup directory.
         alias dot='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
         if ! dot checkout master; then
+            [[ ! -d ~/.cfg.bak ]] && mkdir ~/.cfg.bak
             dot checkout master 2>/dev/stdout | tail -n +2 | head -n -2 | xargs mv -t ~/.cfg.bak/
             dot checkout master
         fi
