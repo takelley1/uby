@@ -157,7 +157,7 @@ install_packages() {
     fi
 }
 
-# TODO: Install lf, neovim stable ppa
+# TODO: Install lf
 
 install_lazygit() {
     [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
@@ -206,6 +206,20 @@ install_external_packages() {
             sudo apt update
             sudo apt install -y hstr
             print "Done installing hstr"
+            break
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+
+    while :; do
+        read -r -p 'Install neovim ppa? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            sudo add-apt-repository ppa:neovim-ppa/stable
+            sudo apt update
+            print "Done installing neovim ppa"
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
