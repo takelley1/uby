@@ -520,7 +520,10 @@ generate_ssh_key() {
         fi
         print "Displaying SSH key and adding to clipboard"
         cat ~/.ssh/id_ed25519.pub
+        # Allow this to fail if no X display is detected.
+        set +e
         xclip -selection clipboard <~/.ssh/id_ed25519.pub
+        set -e
         printf "%s\n" ""
 
     elif [[ "${response}" =~ [nN] ]]; then
