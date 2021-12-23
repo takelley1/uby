@@ -555,6 +555,66 @@ clone_github_repo() {
     fi
 }
 
+clone_my_repos() {
+    read -r -p 'Clone my repos? [y/n]: ' response
+    if [[ "${response}" =~ [yY] ]]; then
+
+        cd ~ || exit 1
+        export GIT_SSL_NO_VERIFY=true
+        git clone --recurse-submodules git@github.com:takelley1/scripts.git
+        git clone git@github.com:takelley1/notes.git
+        git clone git@github.com:takelley1/linux-notes.git
+
+        [[ ! -d ~/repos ]] && mkdir ~/repos
+        [[ ! -d ~/roles ]] && mkdir ~/roles
+
+        cd ~/roles || exit 1
+        git clone git@github.com:takelley1/ansible-role-sonarqube.git sonarqube
+        git clone git@github.com:takelley1/ansible-role-postgresql.git postgresql
+        git clone git@github.com:takelley1/ansible-role-nexus.git nexus
+        git clone git@github.com:takelley1/ansible-role-jira-software.git jira_software
+        git clone git@github.com:takelley1/ansible-role-httpd.git httpd
+        git clone git@github.com:takelley1/ansible-role-haproxy.git haproxy
+        git clone git@github.com:takelley1/ansible-role-gitlab-runner.git gitlab_runner
+        git clone git@github.com:takelley1/ansible-role-gitlab.git gitlab
+        git clone git@github.com:takelley1/ansible-role-docker.git docker
+        git clone git@github.com:takelley1/ansible-role-confluence.git confluence
+        git clone git@github.com:takelley1/ansible-role-bitbucket.git bitbucket
+        git clone git@github.com:takelley1/ansible-role-zabbix-proxy.git zabbix_proxy
+        git clone git@github.com:takelley1/ansible-role-users.git users
+        git clone git@github.com:takelley1/ansible-role-trusted-certs.git trusted_certs
+        git clone git@github.com:takelley1/ansible-role-tenablesc.git tenablesc
+        git clone git@github.com:takelley1/ansible-role-sysctl.git sysctl
+        git clone git@github.com:takelley1/ansible-role-stig-rhel-7.git stig_rhel_7
+        git clone git@github.com:takelley1/ansible-role-samba-server.git samba_server
+        git clone git@github.com:takelley1/ansible-role-rsyslog.git rsyslog
+        git clone git@github.com:takelley1/ansible-role-repos.git repos
+        git clone git@github.com:takelley1/ansible-role-repo-mirror.git repo_mirror
+        git clone git@github.com:takelley1/ansible-role-postfix.git postfix
+        git clone git@github.com:takelley1/ansible-role-packages.git packages
+        git clone git@github.com:takelley1/ansible-role-openssh.git openssh
+        git clone git@github.com:takelley1/ansible-role-mcafee-agent.git mcafee_agent
+        git clone git@github.com:takelley1/ansible-role-logrotate.git logrotate
+        git clone git@github.com:takelley1/ansible-role-firewalld.git firewalld
+        git clone git@github.com:takelley1/ansible-role-cron.git cron
+        git clone git@github.com:takelley1/ansible-role-chrony.git chrony
+        git clone git@github.com:takelley1/ansible-role-unix-common.git unix_common
+        git clone git@github.com:takelley1/ansible-role-e2guardian.git e2guardian
+        git clone git@github.com:takelley1/ansible-role-zabbix-server.git zabbix_server
+        git clone git@github.com:takelley1/ansible-role-zabbix-agent.git zabbix_agent
+        git clone git@github.com:takelley1/ansible-role-workstation.git workstation
+        git clone git@github.com:takelley1/ansible-role-podman-services.git podman_services
+        git clone git@github.com:takelley1/ansible-role-dotfiles.git dotfiles
+        git clone git@github.com:takelley1/ansible-role-bootstrap.git bootstrap
+
+    elif [[ "${response}" =~ [nN] ]]; then
+        return
+    else
+        echo "Enter y or n"
+        clone_my_repos
+    fi
+}
+
 post_install_message() {
     printf "\n"
     print "Done!"
@@ -581,6 +641,7 @@ disable_services
 enable_passwordless_sudo
 generate_ssh_key
 clone_github_repo
+clone_my_repos
 
 post_install_message
 
