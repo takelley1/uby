@@ -587,57 +587,65 @@ clone_github_repo() {
     fi
 }
 
+
+clone_repo() {
+# $1 is the cloning URL of the repo
+# $2 is the name of the directory the repo will be cloned into (relative path).
+if [[ ! -d "${2}" ]]; then
+    git clone --recurse-submodules "${1}" "${2}"
+fi
+}
+
 clone_my_repos() {
     read -r -p 'Clone my repos? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
 
         cd ~ || exit 1
         export GIT_SSL_NO_VERIFY=true
-        git clone --recurse-submodules git@github.com:takelley1/scripts.git
-        git clone git@github.com:takelley1/notes.git
-        git clone git@github.com:takelley1/linux-notes.git
+        clone_repo "git@github.com:takelley1/scripts.git" "scripts"
+        clone_repo "git@github.com:takelley1/notes.git" "notes"
+        clone_repo "git@github.com:takelley1/linux-notes.git" "linux-notes"
 
         [[ ! -d ~/repos ]] && mkdir ~/repos
         [[ ! -d ~/roles ]] && mkdir ~/roles
 
         cd ~/roles || exit 1
-        git clone git@github.com:takelley1/ansible-role-sonarqube.git sonarqube
-        git clone git@github.com:takelley1/ansible-role-postgresql.git postgresql
-        git clone git@github.com:takelley1/ansible-role-nexus.git nexus
-        git clone git@github.com:takelley1/ansible-role-jira-software.git jira_software
-        git clone git@github.com:takelley1/ansible-role-httpd.git httpd
-        git clone git@github.com:takelley1/ansible-role-haproxy.git haproxy
-        git clone git@github.com:takelley1/ansible-role-gitlab-runner.git gitlab_runner
-        git clone git@github.com:takelley1/ansible-role-gitlab.git gitlab
-        git clone git@github.com:takelley1/ansible-role-docker.git docker
-        git clone git@github.com:takelley1/ansible-role-confluence.git confluence
-        git clone git@github.com:takelley1/ansible-role-bitbucket.git bitbucket
-        git clone git@github.com:takelley1/ansible-role-zabbix-proxy.git zabbix_proxy
-        git clone git@github.com:takelley1/ansible-role-users.git users
-        git clone git@github.com:takelley1/ansible-role-trusted-certs.git trusted_certs
-        git clone git@github.com:takelley1/ansible-role-tenablesc.git tenablesc
-        git clone git@github.com:takelley1/ansible-role-sysctl.git sysctl
-        git clone git@github.com:takelley1/ansible-role-stig-rhel-7.git stig_rhel_7
-        git clone git@github.com:takelley1/ansible-role-samba-server.git samba_server
-        git clone git@github.com:takelley1/ansible-role-rsyslog.git rsyslog
-        git clone git@github.com:takelley1/ansible-role-repos.git repos
-        git clone git@github.com:takelley1/ansible-role-repo-mirror.git repo_mirror
-        git clone git@github.com:takelley1/ansible-role-postfix.git postfix
-        git clone git@github.com:takelley1/ansible-role-packages.git packages
-        git clone git@github.com:takelley1/ansible-role-openssh.git openssh
-        git clone git@github.com:takelley1/ansible-role-mcafee-agent.git mcafee_agent
-        git clone git@github.com:takelley1/ansible-role-logrotate.git logrotate
-        git clone git@github.com:takelley1/ansible-role-firewalld.git firewalld
-        git clone git@github.com:takelley1/ansible-role-cron.git cron
-        git clone git@github.com:takelley1/ansible-role-chrony.git chrony
-        git clone git@github.com:takelley1/ansible-role-unix-common.git unix_common
-        git clone git@github.com:takelley1/ansible-role-e2guardian.git e2guardian
-        git clone git@github.com:takelley1/ansible-role-zabbix-server.git zabbix_server
-        git clone git@github.com:takelley1/ansible-role-zabbix-agent.git zabbix_agent
-        git clone git@github.com:takelley1/ansible-role-workstation.git workstation
-        git clone git@github.com:takelley1/ansible-role-podman-services.git podman_services
-        git clone git@github.com:takelley1/ansible-role-dotfiles.git dotfiles
-        git clone git@github.com:takelley1/ansible-role-bootstrap.git bootstrap
+        clone_repo "git@github.com:takelley1/ansible-role-postgresql.git" "postgresql"
+        clone_repo "git@github.com:takelley1/ansible-role-nexus.git" "nexus"
+        clone_repo "git@github.com:takelley1/ansible-role-jira-software.git" "jira_software"
+        clone_repo "git@github.com:takelley1/ansible-role-httpd.git" "httpd"
+        clone_repo "git@github.com:takelley1/ansible-role-haproxy.git" "haproxy"
+        clone_repo "git@github.com:takelley1/ansible-role-gitlab-runner.git" "gitlab_runner"
+        clone_repo "git@github.com:takelley1/ansible-role-gitlab.git" "gitlab"
+        clone_repo "git@github.com:takelley1/ansible-role-docker.git" "docker"
+        clone_repo "git@github.com:takelley1/ansible-role-confluence.git" "confluence"
+        clone_repo "git@github.com:takelley1/ansible-role-bitbucket.git" "bitbucket"
+        clone_repo "git@github.com:takelley1/ansible-role-zabbix-proxy.git" "zabbix_proxy"
+        clone_repo "git@github.com:takelley1/ansible-role-users.git" "users"
+        clone_repo "git@github.com:takelley1/ansible-role-trusted-certs.git" "trusted_certs"
+        clone_repo "git@github.com:takelley1/ansible-role-tenablesc.git" "tenablesc"
+        clone_repo "git@github.com:takelley1/ansible-role-sysctl.git" "sysctl"
+        clone_repo "git@github.com:takelley1/ansible-role-stig-rhel-7.git" "stig_rhel_7"
+        clone_repo "git@github.com:takelley1/ansible-role-samba-server.git" "samba_server"
+        clone_repo "git@github.com:takelley1/ansible-role-rsyslog.git" "rsyslog"
+        clone_repo "git@github.com:takelley1/ansible-role-repos.git" "repos"
+        clone_repo "git@github.com:takelley1/ansible-role-repo-mirror.git" "repo_mirror"
+        clone_repo "git@github.com:takelley1/ansible-role-postfix.git" "postfix"
+        clone_repo "git@github.com:takelley1/ansible-role-packages.git" "packages"
+        clone_repo "git@github.com:takelley1/ansible-role-openssh.git" "openssh"
+        clone_repo "git@github.com:takelley1/ansible-role-mcafee-agent.git" "mcafee_agent"
+        clone_repo "git@github.com:takelley1/ansible-role-logrotate.git" "logrotate"
+        clone_repo "git@github.com:takelley1/ansible-role-firewalld.git" "firewalld"
+        clone_repo "git@github.com:takelley1/ansible-role-cron.git" "cron"
+        clone_repo "git@github.com:takelley1/ansible-role-chrony.git" "chrony"
+        clone_repo "git@github.com:takelley1/ansible-role-unix-common.git" "unix_common"
+        clone_repo "git@github.com:takelley1/ansible-role-e2guardian.git" "e2guardian"
+        clone_repo "git@github.com:takelley1/ansible-role-zabbix-server.git" "zabbix_server"
+        clone_repo "git@github.com:takelley1/ansible-role-zabbix-agent.git" "zabbix_agent"
+        clone_repo "git@github.com:takelley1/ansible-role-workstation.git" "workstation"
+        clone_repo "git@github.com:takelley1/ansible-role-podman-services.git" "podman_services"
+        clone_repo "git@github.com:takelley1/ansible-role-dotfiles.git" "dotfiles"
+        clone_repo "git@github.com:takelley1/ansible-role-bootstrap.git" "bootstrap"
 
     elif [[ "${response}" =~ [nN] ]]; then
         return
