@@ -157,8 +157,6 @@ install_packages() {
     fi
 }
 
-# TODO: Install lf
-
 install_lazygit() {
     [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
     curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest | \
@@ -190,6 +188,24 @@ install_external_packages() {
         read -r -p 'Install lazygit? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             install_lazygit_check
+            break
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+
+    while :; do
+        read -r -p 'Install lf? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            [[ ! -d /opt/lf ]] && sudo mkdir /opt/lf
+            curl -s -k https://api.github.com/repos/gokcehan/lf/releases/latest | \
+                awk '/https:.*linux-amd64\.tar\.gz/ {gsub(/"/, ""); print $2}' | \
+                sudo wget --no-check-certificate --input-file=- --output-document=/opt/lf/lf.tar.gz
+            sudo tar xzf /opt/lf/lf.tar.gz --directory=/opt/lf
+            sudo cp /opt/lf/lf /usr/bin/lf
+            print "Done installing lf"
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
