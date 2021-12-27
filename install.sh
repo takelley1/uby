@@ -157,8 +157,6 @@ install_packages() {
     fi
 }
 
-# TODO: Install lf, neovim stable ppa
-
 install_lazygit() {
     [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
     curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest | \
@@ -199,6 +197,24 @@ install_external_packages() {
     done
 
     while :; do
+        read -r -p 'Install lf? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            [[ ! -d /opt/lf ]] && sudo mkdir /opt/lf
+            curl -s -k https://api.github.com/repos/gokcehan/lf/releases/latest | \
+                awk '/https:.*linux-amd64\.tar\.gz/ {gsub(/"/, ""); print $2}' | \
+                sudo wget --no-check-certificate --input-file=- --output-document=/opt/lf/lf.tar.gz
+            sudo tar xzf /opt/lf/lf.tar.gz --directory=/opt/lf
+            sudo cp /opt/lf/lf /usr/bin/lf
+            print "Done installing lf"
+            break
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+
+    while :; do
         read -r -p 'Install hstr? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             # From https://github.com/dvorka/hstr/blob/master/INSTALLATION.md#ubuntu
@@ -206,6 +222,20 @@ install_external_packages() {
             sudo apt update
             sudo apt install -y hstr
             print "Done installing hstr"
+            break
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+
+    while :; do
+        read -r -p 'Install neovim ppa? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            sudo add-apt-repository ppa:neovim-ppa/stable
+            sudo apt update
+            print "Done installing neovim ppa"
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
@@ -519,7 +549,10 @@ generate_ssh_key() {
         fi
         print "Displaying SSH key and adding to clipboard"
         cat ~/.ssh/id_ed25519.pub
+        # Allow this to fail if no X display is detected.
+        set +e
         xclip -selection clipboard <~/.ssh/id_ed25519.pub
+        set -e
         printf "%s\n" ""
 
     elif [[ "${response}" =~ [nN] ]]; then
@@ -554,6 +587,66 @@ clone_github_repo() {
     fi
 }
 
+clone_my_repos() {
+    read -r -p 'Clone my repos? [y/n]: ' response
+    if [[ "${response}" =~ [yY] ]]; then
+
+        cd ~ || exit 1
+        export GIT_SSL_NO_VERIFY=true
+        git clone --recurse-submodules git@github.com:takelley1/scripts.git
+        git clone git@github.com:takelley1/notes.git
+        git clone git@github.com:takelley1/linux-notes.git
+
+        [[ ! -d ~/repos ]] && mkdir ~/repos
+        [[ ! -d ~/roles ]] && mkdir ~/roles
+
+        cd ~/roles || exit 1
+        git clone git@github.com:takelley1/ansible-role-sonarqube.git sonarqube
+        git clone git@github.com:takelley1/ansible-role-postgresql.git postgresql
+        git clone git@github.com:takelley1/ansible-role-nexus.git nexus
+        git clone git@github.com:takelley1/ansible-role-jira-software.git jira_software
+        git clone git@github.com:takelley1/ansible-role-httpd.git httpd
+        git clone git@github.com:takelley1/ansible-role-haproxy.git haproxy
+        git clone git@github.com:takelley1/ansible-role-gitlab-runner.git gitlab_runner
+        git clone git@github.com:takelley1/ansible-role-gitlab.git gitlab
+        git clone git@github.com:takelley1/ansible-role-docker.git docker
+        git clone git@github.com:takelley1/ansible-role-confluence.git confluence
+        git clone git@github.com:takelley1/ansible-role-bitbucket.git bitbucket
+        git clone git@github.com:takelley1/ansible-role-zabbix-proxy.git zabbix_proxy
+        git clone git@github.com:takelley1/ansible-role-users.git users
+        git clone git@github.com:takelley1/ansible-role-trusted-certs.git trusted_certs
+        git clone git@github.com:takelley1/ansible-role-tenablesc.git tenablesc
+        git clone git@github.com:takelley1/ansible-role-sysctl.git sysctl
+        git clone git@github.com:takelley1/ansible-role-stig-rhel-7.git stig_rhel_7
+        git clone git@github.com:takelley1/ansible-role-samba-server.git samba_server
+        git clone git@github.com:takelley1/ansible-role-rsyslog.git rsyslog
+        git clone git@github.com:takelley1/ansible-role-repos.git repos
+        git clone git@github.com:takelley1/ansible-role-repo-mirror.git repo_mirror
+        git clone git@github.com:takelley1/ansible-role-postfix.git postfix
+        git clone git@github.com:takelley1/ansible-role-packages.git packages
+        git clone git@github.com:takelley1/ansible-role-openssh.git openssh
+        git clone git@github.com:takelley1/ansible-role-mcafee-agent.git mcafee_agent
+        git clone git@github.com:takelley1/ansible-role-logrotate.git logrotate
+        git clone git@github.com:takelley1/ansible-role-firewalld.git firewalld
+        git clone git@github.com:takelley1/ansible-role-cron.git cron
+        git clone git@github.com:takelley1/ansible-role-chrony.git chrony
+        git clone git@github.com:takelley1/ansible-role-unix-common.git unix_common
+        git clone git@github.com:takelley1/ansible-role-e2guardian.git e2guardian
+        git clone git@github.com:takelley1/ansible-role-zabbix-server.git zabbix_server
+        git clone git@github.com:takelley1/ansible-role-zabbix-agent.git zabbix_agent
+        git clone git@github.com:takelley1/ansible-role-workstation.git workstation
+        git clone git@github.com:takelley1/ansible-role-podman-services.git podman_services
+        git clone git@github.com:takelley1/ansible-role-dotfiles.git dotfiles
+        git clone git@github.com:takelley1/ansible-role-bootstrap.git bootstrap
+
+    elif [[ "${response}" =~ [nN] ]]; then
+        return
+    else
+        echo "Enter y or n"
+        clone_my_repos
+    fi
+}
+
 post_install_message() {
     printf "\n"
     print "Done!"
@@ -580,6 +673,7 @@ disable_services
 enable_passwordless_sudo
 generate_ssh_key
 clone_github_repo
+clone_my_repos
 
 post_install_message
 
