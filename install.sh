@@ -97,6 +97,7 @@ install_packages() {
             agrep \
             ansible \
             apt-rdepends \
+            autojump \
             curl \
             dash \
             feh \
@@ -286,10 +287,12 @@ install_pip_packages() {
             --trusted-host files.pythonhosted.org \
             install \
                 bashate \
-                ueberzug \
                 jedi \
+                molecule \
+                pydocstyle \
                 reorder-python-imports \
-                molecule
+                ueberzug \
+                yamllint
         print "Done installing pip packages"
     elif [[ "${response}" =~ [nN] ]]; then
         return
