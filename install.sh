@@ -287,9 +287,11 @@ install_pip_packages() {
             --trusted-host files.pythonhosted.org \
             install \
             bashate \
+            flake8 \
             jedi \
             molecule \
             pydocstyle \
+            pylint \
             reorder-python-imports \
             ueberzug \
             yamllint
