@@ -35,8 +35,8 @@ add_proxy_ip_and_port() {
             "http_proxy=http://${proxy_ip_and_port}" \
             'https_proxy=${http_proxy}' \
             'HTTP_PROXY=${http_proxy}' \
-            'HTTPS_PROXY=${http_proxy}' | \
-        sudo tee /etc/profile.d/proxy.sh 1>/dev/null
+            'HTTPS_PROXY=${http_proxy}' |
+            sudo tee /etc/profile.d/proxy.sh 1>/dev/null
 
         sudo cp -- /etc/profile.d/proxy.sh /etc/environment.d/00proxy.conf
 
@@ -44,8 +44,8 @@ add_proxy_ip_and_port() {
         printf \
             "%s\n%s\n" \
             "Acquire::http::Proxy \"http://${proxy_ip_and_port}\";" \
-            "Acquire::https::Proxy \"http://${proxy_ip_and_port}\";" | \
-        sudo tee /etc/apt/apt.conf.d/proxy.conf 1>/dev/null
+            "Acquire::https::Proxy \"http://${proxy_ip_and_port}\";" |
+            sudo tee /etc/apt/apt.conf.d/proxy.conf 1>/dev/null
 
         # Restart snapd to read new environment vars.
         systemctl restart snapd
@@ -160,8 +160,8 @@ install_packages() {
 
 install_lazygit() {
     [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
-    curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest | \
-        awk '/https:.*Linux_x86_64\.tar\.gz/ {gsub(/"/, ""); print $2}' | \
+    curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest |
+        awk '/https:.*Linux_x86_64\.tar\.gz/ {gsub(/"/, ""); print $2}' |
         sudo wget --no-check-certificate --input-file=- --output-document=/opt/lazygit/lazygit.tar.gz
     sudo tar xzf /opt/lazygit/lazygit.tar.gz --directory=/opt/lazygit
     sudo cp /opt/lazygit/lazygit /usr/bin/lazygit
@@ -201,8 +201,8 @@ install_external_packages() {
         read -r -p 'Install lf? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             [[ ! -d /opt/lf ]] && sudo mkdir /opt/lf
-            curl -s -k https://api.github.com/repos/gokcehan/lf/releases/latest | \
-                awk '/https:.*linux-amd64\.tar\.gz/ {gsub(/"/, ""); print $2}' | \
+            curl -s -k https://api.github.com/repos/gokcehan/lf/releases/latest |
+                awk '/https:.*linux-amd64\.tar\.gz/ {gsub(/"/, ""); print $2}' |
                 sudo wget --no-check-certificate --input-file=- --output-document=/opt/lf/lf.tar.gz
             sudo tar xzf /opt/lf/lf.tar.gz --directory=/opt/lf
             sudo cp /opt/lf/lf /usr/bin/lf
@@ -256,8 +256,8 @@ install_external_packages() {
             printf \
                 "%s\n%s\n" \
                 'Acquire::https::apt.releases.hashicorp.com::Verify-Peer "false";' \
-                'Acquire::https::apt.releases.hashicorp.com::Verify-Host "false";' | \
-            sudo tee /etc/apt/apt.conf.d/99hashicorp.conf 1>/dev/null
+                'Acquire::https::apt.releases.hashicorp.com::Verify-Host "false";' |
+                sudo tee /etc/apt/apt.conf.d/99hashicorp.conf 1>/dev/null
 
             sudo apt update
             print "Done installing hashicorp repo"
@@ -286,13 +286,13 @@ install_pip_packages() {
             --trusted-host pypi.python.org \
             --trusted-host files.pythonhosted.org \
             install \
-                bashate \
-                jedi \
-                molecule \
-                pydocstyle \
-                reorder-python-imports \
-                ueberzug \
-                yamllint
+            bashate \
+            jedi \
+            molecule \
+            pydocstyle \
+            reorder-python-imports \
+            ueberzug \
+            yamllint
         print "Done installing pip packages"
     elif [[ "${response}" =~ [nN] ]]; then
         return
@@ -359,9 +359,9 @@ install_dotfiles() {
             [[ ! -d ~/.cfg.bak ]] && mkdir ~/.cfg.bak
             # Must allow the git command to fail here.
             set +e
-            git --git-dir="${HOME}/.cfg/" --work-tree="${HOME}" checkout master 2>/dev/stdout | \
-                tail -n +2 | \
-                head -n -2 | \
+            git --git-dir="${HOME}/.cfg/" --work-tree="${HOME}" checkout master 2>/dev/stdout |
+                tail -n +2 |
+                head -n -2 |
                 xargs mv -t ~/.cfg.bak/
             set -e
             git --git-dir="${HOME}/.cfg/" --work-tree="${HOME}" checkout master
@@ -590,13 +590,12 @@ clone_github_repo() {
     fi
 }
 
-
 clone_repo() {
-# $1 is the cloning URL of the repo
-# $2 is the name of the directory the repo will be cloned into (relative path).
-if [[ ! -d "${2}" ]]; then
-    git clone --recurse-submodules "${1}" "${2}"
-fi
+    # $1 is the cloning URL of the repo
+    # $2 is the name of the directory the repo will be cloned into (relative path).
+    if [[ ! -d "${2}" ]]; then
+        git clone --recurse-submodules "${1}" "${2}"
+    fi
 }
 
 clone_my_repos() {
