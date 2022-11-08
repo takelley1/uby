@@ -246,6 +246,20 @@ install_external_packages() {
     done
 
     while :; do
+        read -r -p 'Install tflint? [y/n]: ' response
+        if [[ "${response}" =~ [yY] ]]; then
+            # From https://github.com/terraform-linters/tflint#installation
+            curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+            print "Done installing tflint"
+            break
+        elif [[ "${response}" =~ [nN] ]]; then
+            break
+        else
+            echo "Enter y or n"
+        fi
+    done
+
+    while :; do
         read -r -p 'Install hashicorp repo? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             # From https://www.hashicorp.com/blog/announcing-the-hashicorp-linux-repository
