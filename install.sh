@@ -98,17 +98,20 @@ install_packages() {
             ansible \
             apt-rdepends \
             autojump \
+            bat \
             curl \
             dash \
             feh \
             flake8 \
             fzf \
+            gcc \
             gimp \
             git \
             htop \
             iftop \
             imagemagick \
             jq \
+            libmagic-dev \
             lsof \
             lxappearance \
             mediainfo \
@@ -206,6 +209,13 @@ install_external_packages() {
                 sudo wget --no-check-certificate --input-file=- --output-document=/opt/lf/lf.tar.gz
             sudo tar xzf /opt/lf/lf.tar.gz --directory=/opt/lf
             sudo cp /opt/lf/lf /usr/bin/lf
+
+            # Also install the ctpv previewer.
+            git clone --depth 1 https://github.com/NikitaIvanovV/ctpv /opt/ctpv
+            cd ctpv
+            sudo make install
+            cd -
+
             print "Done installing lf"
             break
         elif [[ "${response}" =~ [nN] ]]; then
