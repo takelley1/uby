@@ -184,77 +184,22 @@ pkg_upgrade() {
 
 pkg_install_list() {
     local packages=("$@")
-    case "${PACKAGE_MANAGER}" in
-        apt)
-            local attempt_packages=("${packages[@]}")
-            while [[ "${#attempt_packages[@]}" -gt 0 ]]; do
-                if sudo apt install -y "${attempt_packages[@]}"; then
-                    return 0
+    local pkg
+    for pkg in "${packages[@]}"; do
+        case "${PACKAGE_MANAGER}" in
+            apt)
+                if ! sudo apt install -y "${pkg}"; then
+                    echo "Skipping unavailable package: ${pkg}"
                 fi
-                local missing=()
-                local pkg
-                for pkg in "${attempt_packages[@]}"; do
-                    if ! sudo apt install -y "${pkg}"; then
-                        echo "Removing unavailable package: ${pkg}"
-                        missing+=("${pkg}")
-                    fi
-                done
-                if [[ "${#missing[@]}" -eq 0 ]]; then
-                    return
+                ;;
+            dnf|yum)
+                if ! sudo "${PACKAGE_MANAGER_CMD}" install -y "${pkg}"; then
+                    echo "Skipping unavailable package: ${pkg}"
                 fi
-                local next_packages=()
-                for pkg in "${attempt_packages[@]}"; do
-                    local skip_pkg=0
-                    local miss
-                    for miss in "${missing[@]}"; do
-                        if [[ "${pkg}" == "${miss}" ]]; then
-                            skip_pkg=1
-                            break
-                        fi
-                    done
-                    if [[ "${skip_pkg}" -eq 0 ]]; then
-                        next_packages+=("${pkg}")
-                    fi
-                done
-                attempt_packages=("${next_packages[@]}")
-            done
-            return 0
-            ;;
-        dnf|yum)
-            # Try batch install first, if failures occur, remove missing packages and retry.
-            local attempt_packages=("${packages[@]}")
-            while [[ "${#attempt_packages[@]}" -gt 0 ]]; do
-                if sudo "${PACKAGE_MANAGER_CMD}" install -y "${attempt_packages[@]}"; then
-                    return 0
-                fi
-                local missing=()
-                for pkg in "${attempt_packages[@]}"; do
-                    if ! sudo "${PACKAGE_MANAGER_CMD}" install -y "${pkg}"; then
-                        echo "Removing unavailable package: ${pkg}"
-                        missing+=("${pkg}")
-                    fi
-                done
-                if [[ "${#missing[@]}" -eq 0 ]]; then
-                    return
-                fi
-                local next_packages=()
-                for pkg in "${attempt_packages[@]}"; do
-                    local skip_pkg=0
-                    for miss in "${missing[@]}"; do
-                        if [[ "${pkg}" == "${miss}" ]]; then
-                            skip_pkg=1
-                            break
-                        fi
-                    done
-                    if [[ "${skip_pkg}" -eq 0 ]]; then
-                        next_packages+=("${pkg}")
-                    fi
-                done
-                attempt_packages=("${next_packages[@]}")
-            done
-            return 0
-            ;;
-    esac
+                ;;
+        esac
+    done
+    return 0
 }
 
 is_package_installed() {
