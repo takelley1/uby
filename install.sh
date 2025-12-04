@@ -189,7 +189,7 @@ pkg_install_list() {
             local attempt_packages=("${packages[@]}")
             while [[ "${#attempt_packages[@]}" -gt 0 ]]; do
                 if sudo apt install -y "${attempt_packages[@]}"; then
-                    return
+                    return 0
                 fi
                 local missing=()
                 local pkg
@@ -218,13 +218,14 @@ pkg_install_list() {
                 done
                 attempt_packages=("${next_packages[@]}")
             done
+            return 0
             ;;
         dnf|yum)
             # Try batch install first, if failures occur, remove missing packages and retry.
             local attempt_packages=("${packages[@]}")
             while [[ "${#attempt_packages[@]}" -gt 0 ]]; do
                 if sudo "${PACKAGE_MANAGER_CMD}" install -y "${attempt_packages[@]}"; then
-                    return
+                    return 0
                 fi
                 local missing=()
                 for pkg in "${attempt_packages[@]}"; do
@@ -251,6 +252,7 @@ pkg_install_list() {
                 done
                 attempt_packages=("${next_packages[@]}")
             done
+            return 0
             ;;
     esac
 }
@@ -1384,6 +1386,9 @@ run_selected_option() {
     status=$?
     trap - ERR
     set -e
+    if [[ "${status}" -eq 0 ]]; then
+        failed=0
+    fi
     if [[ "${failed}" -eq 1 || "${status}" -ne 0 ]]; then
         printf "\nStep failed (exit %s). Returning to the menu.\n" "${status}"
     fi
