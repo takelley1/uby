@@ -225,6 +225,33 @@ filter_missing_packages() {
     printf "%s\n" "${filtered[@]:-}"
 }
 
+package_available() {
+    case "${PACKAGE_MANAGER}" in
+        apt)
+            apt-cache show "${1}" >/dev/null 2>&1
+            ;;
+        dnf|yum)
+            sudo "${PACKAGE_MANAGER_CMD}" list -q "${1}" >/dev/null 2>&1
+            ;;
+    esac
+}
+
+filter_installable_packages() {
+    local pkg
+    local filtered=()
+    for pkg in "$@"; do
+        if is_package_installed "${pkg}"; then
+            continue
+        fi
+        if package_available "${pkg}"; then
+            filtered+=("${pkg}")
+        else
+            echo "Skipping unavailable package: ${pkg}"
+        fi
+    done
+    printf "%s\n" "${filtered[@]:-}"
+}
+
 pkg_remove_list() {
     local packages=("$@")
     case "${PACKAGE_MANAGER}" in
@@ -477,15 +504,15 @@ install_packages() {
                 zip
             )
         fi
-        local missing_packages=()
-        read -r -a missing_packages < <(filter_missing_packages "${packages[@]}")
-        if [[ "${#missing_packages[@]}" -eq 0 ]]; then
-            print "All developer tools already installed"
+        local installable_packages=()
+        read -r -a installable_packages < <(filter_installable_packages "${packages[@]}")
+        if [[ "${#installable_packages[@]}" -eq 0 ]]; then
+            print "All developer tools already installed or unavailable"
             return 0
         fi
         pkg_update_cache
         pkg_upgrade
-        pkg_install_list "${missing_packages[@]}"
+        pkg_install_list "${installable_packages[@]}"
         print "Done installing packages"
         return 0
     elif [[ "${response}" =~ [nN] ]]; then
