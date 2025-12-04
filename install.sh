@@ -544,32 +544,44 @@ install_neovim() {
     fi
 }
 
-install_kubectl() {
-    if is_apt; then
-        sudo mkdir -p /etc/apt/keyrings
-        curl -fsSLo /etc/apt/keyrings/kubernetes-archive-keyring.gpg \
-            https://packages.cloud.google.com/apt/doc/apt-key.gpg
-        echo "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] \
-https://apt.kubernetes.io/ kubernetes-xenial main" |
-            sudo tee /etc/apt/sources.list.d/kubernetes.list 1>/dev/null
-        pkg_update_cache
-        pkg_install_list kubectl
-        print "Done installing kubectl"
-        return
-    fi
-    sudo tee /etc/yum.repos.d/kubernetes.repo 1>/dev/null <<'EOF'
-[kubernetes]
-name=Kubernetes
-baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-$basearch
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
-       https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-EOF
+install_kubectl_apt() {
+    local version="v1.28"
+    local keyring="/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+    local list="/etc/apt/sources.list.d/kubernetes.list"
+    local repo
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/${version}/deb/Release.key" |
+        sudo gpg --dearmor -o "${keyring}"
+    repo="deb [signed-by=${keyring}] https://pkgs.k8s.io/core:/stable:/${version}/deb/ /"
+    echo "${repo}" | sudo tee "${list}" 1>/dev/null
     pkg_update_cache
     pkg_install_list kubectl
     print "Done installing kubectl"
+}
+
+install_kubectl_rpm() {
+    local version="v1.28"
+    local repo_file="/etc/yum.repos.d/kubernetes.repo"
+    sudo tee "${repo_file}" 1>/dev/null <<EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/${version}/rpm/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/${version}/rpm/repodata/repomd.xml.key
+EOF
+    pkg_update_cache
+    sudo "${PACKAGE_MANAGER_CMD}" install -y kubectl --disableexcludes=kubernetes
+    print "Done installing kubectl"
+}
+
+install_kubectl() {
+    if is_apt; then
+        install_kubectl_apt
+        return
+    fi
+    install_kubectl_rpm
 }
 
 install_docker() {
@@ -1190,24 +1202,24 @@ post_install_message() {
 
 menu_options() {
     printf "%s\n" \
-        "Add proxy" \
-        "Install packages" \
-        "Install external packages" \
-        "Install EPEL (dnf/yum)" \
-        "Install kubectl" \
-        "Install Docker" \
-        "Install Helm" \
-        "Install pip packages" \
+        "Add proxy settings" \
+        "Install developer tools (git, fzf, ripgrep, jq, tmux, etc.)" \
+        "Install external tools (lazygit/lf/hstr/neovim)" \
+        "Install EPEL repo (dnf/yum)" \
+        "Install kubectl (Kubernetes CLI)" \
+        "Install Docker engine + plugins" \
+        "Install Helm (K8s package manager)" \
+        "Install Python pip packages" \
         "Install snap packages" \
-        "Install vim-plug" \
-        "Install dotfiles" \
-        "Install i3" \
+        "Install vim-plug for Neovim" \
+        "Install dotfiles repo" \
+        "Install i3 window manager" \
         "Remove unnecessary packages" \
-        "Disable services" \
+        "Disable background services" \
         "Enable passwordless sudo" \
         "Generate SSH key" \
-        "Clone GitHub repo" \
-        "Clone my repos" \
+        "Clone a GitHub repo" \
+        "Clone personal repos" \
         "Show completion notes" \
         "Quit"
 }
