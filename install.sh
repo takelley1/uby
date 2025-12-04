@@ -587,17 +587,34 @@ install_neovim() {
         print "Neovim already installed"
         return
     fi
-    if is_apt; then
-        sudo add-apt-repository ppa:neovim-ppa/stable
-        pkg_update_cache
-        pkg_install_list neovim
-        print "Done installing neovim"
-        return
-    fi
-    if sudo "${PACKAGE_MANAGER_CMD}" install -y neovim; then
-        print "Done installing neovim"
+    printf "Install Neovim from package manager or nightly AppImage? [p/a]: "
+    local choice
+    read -r choice
+    if [[ "${choice}" =~ [pP] ]]; then
+        if is_apt; then
+            sudo add-apt-repository ppa:neovim-ppa/stable
+            pkg_update_cache
+            pkg_install_list neovim
+            print "Done installing neovim"
+            return
+        fi
+        if sudo "${PACKAGE_MANAGER_CMD}" install -y neovim; then
+            print "Done installing neovim"
+        else
+            printf "%s\n" \
+                "Skipping neovim install; package not available for ${PACKAGE_MANAGER}."
+        fi
+    elif [[ "${choice}" =~ [aA] ]]; then
+        local app_dir="/usr/local/bin"
+        local app_path="${app_dir}/nvim"
+        sudo mkdir -p "${app_dir}"
+        sudo curl -fsSL \
+            https://github.com/neovim/neovim/releases/download/v0.11.5/nvim-linux-x86_64.appimage \
+            -o "${app_path}"
+        sudo chmod +x "${app_path}"
+        print "Done installing neovim AppImage to ${app_path}"
     else
-        printf "%s\n" "Skipping neovim install; package not available for ${PACKAGE_MANAGER}."
+        echo "Invalid choice; skipping neovim install."
     fi
 }
 
