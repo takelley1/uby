@@ -1378,18 +1378,12 @@ handle_menu_choice() {
 
 run_selected_option() {
     local selection="${1}"
-    local failed=0
     local status=0
     set +e
-    trap 'failed=1' ERR
     handle_menu_choice "${selection}"
     status=$?
-    trap - ERR
     set -e
-    if [[ "${status}" -eq 0 ]]; then
-        failed=0
-    fi
-    if [[ "${failed}" -eq 1 || "${status}" -ne 0 ]]; then
+    if [[ "${status}" -ne 0 ]]; then
         printf "\nStep failed (exit %s). Returning to the menu.\n" "${status}"
     fi
     printf "\nPress Enter to return to the menu"
