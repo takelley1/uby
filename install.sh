@@ -488,14 +488,27 @@ install_packages() {
 }
 
 install_lazygit() {
-    [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
-    curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest |
-        awk '/https:.*Linux_x86_64\.tar\.gz/ {gsub(/"/, ""); print $2}' |
-        sudo wget --no-check-certificate --input-file=- \
-            --output-document=/opt/lazygit/lazygit.tar.gz
-    sudo tar xzf /opt/lazygit/lazygit.tar.gz --directory=/opt/lazygit
-    sudo cp /opt/lazygit/lazygit /usr/bin/lazygit
-    print "Done installing lazygit"
+    local version
+    local plain_version
+    local tarball_url
+    local tmp_dir
+    version="$(curl -s https://api.github.com/repos/jesseduffield/lazygit/releases/latest |
+        grep '"tag_name"' |
+        head -n 1 |
+        cut -d '"' -f4)"
+    if [[ -z "${version}" ]]; then
+        echo "Could not determine latest lazygit version"
+        return 1
+    fi
+    plain_version="${version#v}"
+    tarball_url="https://github.com/jesseduffield/lazygit/releases/download/${version}/"\
+"lazygit_${plain_version}_linux_x86_64.tar.gz"
+    tmp_dir="$(mktemp -d)"
+    curl -fsSL -o "${tmp_dir}/lazygit.tar.gz" "${tarball_url}"
+    sudo tar xzf "${tmp_dir}/lazygit.tar.gz" --directory "${tmp_dir}"
+    sudo install -m 0755 "${tmp_dir}/lazygit" /usr/local/bin/lazygit
+    rm -rf "${tmp_dir}"
+    print "Done installing lazygit (${version})"
 }
 
 install_lazygit_check() {
@@ -545,22 +558,25 @@ install_neovim() {
 }
 
 install_kubectl_apt() {
-    local version="v1.28"
+    local version="v1.34"
     local keyring="/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
     local list="/etc/apt/sources.list.d/kubernetes.list"
     local repo
-    sudo mkdir -p /etc/apt/keyrings
+    sudo mkdir -p -m 755 /etc/apt/keyrings
+    pkg_install_list apt-transport-https ca-certificates curl gnupg
     curl -fsSL "https://pkgs.k8s.io/core:/stable:/${version}/deb/Release.key" |
         sudo gpg --dearmor -o "${keyring}"
+    sudo chmod 644 "${keyring}"
     repo="deb [signed-by=${keyring}] https://pkgs.k8s.io/core:/stable:/${version}/deb/ /"
     echo "${repo}" | sudo tee "${list}" 1>/dev/null
+    sudo chmod 644 "${list}"
     pkg_update_cache
     pkg_install_list kubectl
     print "Done installing kubectl"
 }
 
 install_kubectl_rpm() {
-    local version="v1.28"
+    local version="v1.34"
     local repo_file="/etc/yum.repos.d/kubernetes.repo"
     sudo tee "${repo_file}" 1>/dev/null <<EOF
 [kubernetes]
@@ -617,28 +633,15 @@ https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" |
 }
 
 install_helm() {
-    if is_apt; then
-        curl https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor \
-            -o /usr/share/keyrings/helm.gpg
-        echo "deb [signed-by=/usr/share/keyrings/helm.gpg] \
-https://baltocdn.com/helm/stable/debian/ all main" |
-            sudo tee /etc/apt/sources.list.d/helm-stable-debian.list 1>/dev/null
-        pkg_update_cache
-        pkg_install_list helm
-        print "Done installing helm"
-        return
+    local helm_script="/tmp/get_helm.sh"
+    curl -fsSL -o "${helm_script}" \
+        https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4
+    chmod 700 "${helm_script}"
+    if ! "${helm_script}"; then
+        echo "Helm installation failed"
+    else
+        print "Done installing Helm"
     fi
-    sudo tee /etc/yum.repos.d/helm.repo 1>/dev/null <<'EOF'
-[helm]
-name=Helm
-baseurl=https://baltocdn.com/helm/stable/rpm
-enabled=1
-gpgcheck=1
-gpgkey=https://baltocdn.com/helm/signing.asc
-EOF
-    pkg_update_cache
-    pkg_install_list helm
-    print "Done installing helm"
 }
 
 configure_hashicorp_repo_apt() {
@@ -884,6 +887,10 @@ install_dotfiles() {
                 xargs mv -t ~/.cfg.bak/
             set -e
             git --git-dir="${HOME}/.cfg/" --work-tree="${HOME}" checkout master
+        fi
+        if [[ -r "${HOME}/.cfg/.bashrc" ]]; then
+            cp "${HOME}/.cfg/.bashrc" "${HOME}/.bashrc"
+            print "Copied .bashrc from dotfiles to ${HOME}/.bashrc"
         fi
         print "Done installing dotfiles"
 
@@ -1220,7 +1227,6 @@ menu_options() {
         "Generate SSH key" \
         "Clone a GitHub repo" \
         "Clone personal repos" \
-        "Show completion notes" \
         "Quit"
 }
 
@@ -1272,8 +1278,7 @@ handle_menu_choice() {
         15) generate_ssh_key ;;
         16) clone_github_repo ;;
         17) clone_my_repos ;;
-        18) post_install_message ;;
-        19) exit 0 ;;
+        18) exit 0 ;;
     esac
 }
 
