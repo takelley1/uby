@@ -1,7 +1,240 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
 
-set -euo pipefail
+set -eEuo pipefail
+
+PACKAGE_MANAGER=""
+PACKAGE_MANAGER_CMD=""
+add_proxy_response=""
+
+detect_package_manager() {
+    if command -v apt >/dev/null 2>&1; then
+        PACKAGE_MANAGER="apt"
+        PACKAGE_MANAGER_CMD="apt"
+    elif command -v dnf >/dev/null 2>&1; then
+        PACKAGE_MANAGER="dnf"
+        PACKAGE_MANAGER_CMD="dnf"
+    elif command -v yum >/dev/null 2>&1; then
+        PACKAGE_MANAGER="yum"
+        PACKAGE_MANAGER_CMD="yum"
+    else
+        echo "Supported package manager not found (need apt, dnf, or yum)."
+        exit 1
+    fi
+}
+
+is_apt() {
+    [[ "${PACKAGE_MANAGER}" == "apt" ]]
+}
+
+hashicorp_repo_url() {
+    local os_id=""
+    local os_id_like=""
+    if [[ -r /etc/os-release ]]; then
+        os_id="$(grep -E '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+        os_id_like="$(grep -E '^ID_LIKE=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+    fi
+    if [[ "${os_id_like}" == *"fedora"* || "${os_id}" == "fedora" ]]; then
+        printf "%s" "https://rpm.releases.hashicorp.com/fedora/hashicorp.repo"
+        return
+    fi
+    if [[ "${os_id_like}" == *"rhel"* ]] || \
+        [[ "${os_id}" =~ ^(rhel|centos|rocky|almalinux)$ ]]
+    then
+        printf "%s" "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"
+        return
+    fi
+    printf "%s" ""
+}
+
+check_binaries() {
+    local missing=0
+    for binary in "$@"; do
+        if ! command -v "${binary}" >/dev/null 2>&1; then
+            echo "Missing required binary: ${binary}"
+            missing=1
+        fi
+    done
+    printf "%s" "${missing}"
+}
+
+package_for_binary() {
+    case "${1}" in
+        add-apt-repository) printf "%s" "software-properties-common" ;;
+        lsb_release) printf "%s" "lsb-release" ;;
+        apt-key) printf "%s" "apt" ;;
+        *) printf "%s" "${1}" ;;
+    esac
+}
+
+package_in_list() {
+    local target="${1}"
+    shift
+    for item in "$@"; do
+        if [[ "${item}" == "${target}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+install_missing_binaries() {
+    local missing_binaries=("$@")
+    local packages=()
+    for binary in "${missing_binaries[@]}"; do
+        local pkg
+        pkg="$(package_for_binary "${binary}")"
+        if ! package_in_list "${pkg}" "${packages[@]:-}"; then
+            packages+=("${pkg}")
+        fi
+    done
+    if [[ "${#packages[@]}" -eq 0 ]]; then
+        return
+    fi
+    print "Installing required binaries: ${packages[*]}"
+    pkg_install_list "${packages[@]}"
+}
+
+verify_required_binaries() {
+    local missing_binaries=()
+    local missing
+    missing="$(check_binaries sudo curl wget git awk tee grep sed cut tr head tail xargs)"
+    if [[ "${missing}" -eq 1 ]]; then
+        missing_binaries+=(
+            "sudo" "curl" "wget" "git" "awk" "tee"
+            "grep" "sed" "cut" "tr" "head" "tail" "xargs"
+        )
+    fi
+    if is_apt; then
+        if [[ "$(check_binaries apt add-apt-repository apt-key lsb_release)" -eq 1 ]]; then
+            missing_binaries+=("apt" "add-apt-repository" "apt-key" "lsb_release")
+        fi
+    else
+        if [[ "$(check_binaries "${PACKAGE_MANAGER_CMD}" rpm)" -eq 1 ]]; then
+            missing_binaries+=("${PACKAGE_MANAGER_CMD}" "rpm")
+        fi
+    fi
+    if [[ "${#missing_binaries[@]}" -eq 0 ]]; then
+        return
+    fi
+    printf "%s\n" "Install missing binaries now? [y/n]: "
+    local response
+    read -r response
+    if [[ "${response}" =~ [yY] ]]; then
+        install_missing_binaries "${missing_binaries[@]}"
+    else
+        echo "Missing required binaries. Exiting."
+        exit 1
+    fi
+}
+
+install_epel() {
+    if is_apt; then
+        echo "EPEL is only available on yum or dnf systems."
+        return
+    fi
+    if [[ ! -r /etc/os-release ]]; then
+        echo "Cannot detect release; /etc/os-release missing."
+        return
+    fi
+    local version_id=""
+    local major_version=""
+    version_id="$(grep -E '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+    major_version="${version_id%%.*}"
+    if [[ -z "${major_version}" ]]; then
+        echo "Cannot determine major version from VERSION_ID=${version_id}"
+        return
+    fi
+    local epel_url
+    epel_url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${major_version}.noarch.rpm"
+    if ! sudo "${PACKAGE_MANAGER_CMD}" install -y "${epel_url}"; then
+        echo "Failed to install EPEL from ${epel_url}"
+        return
+    fi
+    print "Done installing EPEL for release ${major_version}"
+}
+
+pkg_update_cache() {
+    case "${PACKAGE_MANAGER}" in
+        apt)
+            sudo apt update
+            ;;
+        dnf)
+            sudo dnf makecache --refresh
+            ;;
+        yum)
+            sudo yum makecache
+            ;;
+    esac
+}
+
+pkg_upgrade() {
+    case "${PACKAGE_MANAGER}" in
+        apt)
+            sudo apt upgrade -y
+            ;;
+        dnf)
+            sudo dnf upgrade -y
+            ;;
+        yum)
+            sudo yum update -y
+            ;;
+    esac
+}
+
+pkg_install_list() {
+    local packages=("$@")
+    case "${PACKAGE_MANAGER}" in
+        apt)
+            sudo apt install -y "${packages[@]}"
+            ;;
+        dnf|yum)
+            # Try batch install first, if failures occur, remove missing packages and retry.
+            local attempt_packages=("${packages[@]}")
+            while [[ "${#attempt_packages[@]}" -gt 0 ]]; do
+                if sudo "${PACKAGE_MANAGER_CMD}" install -y "${attempt_packages[@]}"; then
+                    return
+                fi
+                local missing=()
+                for pkg in "${attempt_packages[@]}"; do
+                    if ! sudo "${PACKAGE_MANAGER_CMD}" install -y "${pkg}"; then
+                        echo "Removing unavailable package: ${pkg}"
+                        missing+=("${pkg}")
+                    fi
+                done
+                if [[ "${#missing[@]}" -eq 0 ]]; then
+                    return
+                fi
+                local next_packages=()
+                for pkg in "${attempt_packages[@]}"; do
+                    local skip_pkg=0
+                    for miss in "${missing[@]}"; do
+                        if [[ "${pkg}" == "${miss}" ]]; then
+                            skip_pkg=1
+                            break
+                        fi
+                    done
+                    if [[ "${skip_pkg}" -eq 0 ]]; then
+                        next_packages+=("${pkg}")
+                    fi
+                done
+                attempt_packages=("${next_packages[@]}")
+            done
+            ;;
+    esac
+}
+
+pkg_remove_list() {
+    local packages=("$@")
+    case "${PACKAGE_MANAGER}" in
+        apt)
+            sudo apt purge -y "${packages[@]}"
+            ;;
+        dnf|yum)
+            sudo "${PACKAGE_MANAGER_CMD}" remove -y "${packages[@]}"
+            ;;
+    esac
+}
 
 print() {
     printf \
@@ -37,22 +270,46 @@ add_proxy_ip_and_port() {
             'HTTP_PROXY=${http_proxy}' \
             'HTTPS_PROXY=${http_proxy}' |
             sudo tee /etc/profile.d/proxy.sh 1>/dev/null
-
         sudo cp -- /etc/profile.d/proxy.sh /etc/environment.d/00proxy.conf
 
-        # Add to apt configuration.
-        printf \
-            "%s\n%s\n" \
-            "Acquire::http::Proxy \"http://${proxy_ip_and_port}\";" \
-            "Acquire::https::Proxy \"http://${proxy_ip_and_port}\";" |
-            sudo tee /etc/apt/apt.conf.d/proxy.conf 1>/dev/null
+        if is_apt; then
+            # Add to apt configuration.
+            printf \
+                "%s\n%s\n" \
+                "Acquire::http::Proxy \"http://${proxy_ip_and_port}\";" \
+                "Acquire::https::Proxy \"http://${proxy_ip_and_port}\";" |
+                sudo tee /etc/apt/apt.conf.d/proxy.conf 1>/dev/null
 
-        # Restart snapd to read new environment vars.
-        systemctl restart snapd
-        apt update
+            # Restart snapd to read new environment vars.
+            systemctl restart snapd
+        else
+            configure_yum_dnf_proxy "${proxy_ip_and_port}"
+        fi
+        pkg_update_cache
     else
         echo "Must use a format of IP:PORT (e.g. 10.0.0.1:3143 or myproxy.domain:8008)"
         add_proxy_ip_and_port
+    fi
+}
+
+configure_yum_dnf_proxy() {
+    local proxy_ip_and_port="${1}"
+    local config_path
+
+    if [[ "${PACKAGE_MANAGER}" == "dnf" ]]; then
+        config_path="/etc/dnf/dnf.conf"
+    else
+        config_path="/etc/yum.conf"
+    fi
+
+    sudo mkdir -p "$(dirname "${config_path}")"
+    sudo touch "${config_path}"
+
+    if sudo grep -q "^proxy=" "${config_path}"; then
+        sudo sed -i "s|^proxy=.*|proxy=http://${proxy_ip_and_port}|" "${config_path}"
+    else
+        printf "\nproxy=http://%s\n" "${proxy_ip_and_port}" |
+            sudo tee -a "${config_path}" 1>/dev/null
     fi
 }
 
@@ -76,82 +333,151 @@ download_proxy_cert() {
             [[ ! -d "${proxy_dir}" ]] && sudo mkdir "${proxy_dir}"
 
             print "Attempting to download certificate"
-            sudo wget -v "${proxy_cert_url}" --output-document="${proxy_dir}/proxy_${proxy_ip_and_port}_cert.crt"
+            sudo wget -v "${proxy_cert_url}" \
+                --output-document="${proxy_dir}/proxy_${proxy_ip_and_port}_cert.crt"
 
             print "Updating certificate store"
-            sudo update-ca-certificates
+            if is_apt; then
+                sudo update-ca-certificates
+            else
+                sudo update-ca-trust extract
+            fi
             return
         else
-            echo 'Must use a format of ^(http|ftp)s?:\/\/.+\. (e.g. http://myserver.domain/certp.pem)'
+            printf "%s\n" \
+                'Must use a format of ^(http|ftp)s?:\/\/.+\.' \
+                'Example: http://myserver.domain/certp.pem'
         fi
     done
 }
 
 install_packages() {
-    read -r -p 'Install apt packages? [y/n]: ' response
+    read -r -p "Install ${PACKAGE_MANAGER} packages? [y/n]: " response
     if [[ "${response}" =~ [yY] ]]; then
-        print "Installing apt packages"
-        sudo apt update
-        sudo apt upgrade -y
-        sudo apt install -y \
-            agrep \
-            ansible \
-            apt-rdepends \
-            autojump \
-            bat \
-            curl \
-            dash \
-            feh \
-            flake8 \
-            fzf \
-            gcc \
-            gimp \
-            git \
-            htop \
-            iftop \
-            imagemagick \
-            jq \
-            libmagic-dev \
-            lsof \
-            lxappearance \
-            mediainfo \
-            mlocate \
-            moreutils \
-            mpv \
-            net-tools \
-            netcat \
-            nfs-common \
-            nfstrace \
-            nfswatch \
-            npm \
-            p7zip \
-            pdfgrep \
-            pngcrush \
-            python3-isort \
-            python3-pip \
-            python3-psutil \
-            python3-pynvim \
-            ranger \
-            renameutils \
-            ripgrep \
-            rofi \
-            rsync \
-            rxvt-unicode \
-            screen \
-            scrot \
-            shellcheck \
-            sloccount \
-            sshpass \
-            strace \
-            sxiv \
-            tcpdump \
-            thunar \
-            tmux \
-            tuned \
-            w3m \
-            xclip \
-            yarn \
-            zip
+        print "Installing ${PACKAGE_MANAGER} packages"
+        pkg_update_cache
+        pkg_upgrade
+
+        if is_apt; then
+            pkg_install_list \
+                agrep \
+                ansible \
+                apt-rdepends \
+                autojump \
+                bat \
+                curl \
+                dash \
+                feh \
+                flake8 \
+                fzf \
+                gcc \
+                gimp \
+                git \
+                htop \
+                iftop \
+                imagemagick \
+                jq \
+                libmagic-dev \
+                lsof \
+                lxappearance \
+                mediainfo \
+                mlocate \
+                moreutils \
+                mpv \
+                net-tools \
+                netcat \
+                nfs-common \
+                nfstrace \
+                nfswatch \
+                npm \
+                p7zip \
+                pdfgrep \
+                pngcrush \
+                python3-isort \
+                python3-pip \
+                python3-psutil \
+                python3-pynvim \
+                ranger \
+                renameutils \
+                ripgrep \
+                rofi \
+                rsync \
+                rxvt-unicode \
+                screen \
+                scrot \
+                shellcheck \
+                sloccount \
+                sshpass \
+                strace \
+                sxiv \
+                tcpdump \
+                thunar \
+                tmux \
+                tuned \
+                w3m \
+                xclip \
+                yarn \
+                zip
+        else
+            pkg_install_list \
+                agrep \
+                ansible \
+                autojump \
+                bat \
+                curl \
+                dash \
+                feh \
+                python3-flake8 \
+                fzf \
+                gcc \
+                gimp \
+                git \
+                htop \
+                iftop \
+                ImageMagick \
+                jq \
+                file-devel \
+                lsof \
+                lxappearance \
+                mediainfo \
+                mlocate \
+                moreutils \
+                mpv \
+                net-tools \
+                nmap-ncat \
+                nfs-utils \
+                nfstrace \
+                nfswatch \
+                npm \
+                p7zip \
+                pdfgrep \
+                pngcrush \
+                python3-isort \
+                python3-pip \
+                python3-psutil \
+                python3-neovim \
+                ranger \
+                renameutils \
+                ripgrep \
+                rofi \
+                rsync \
+                rxvt-unicode \
+                screen \
+                scrot \
+                ShellCheck \
+                sloccount \
+                sshpass \
+                strace \
+                sxiv \
+                tcpdump \
+                thunar \
+                tmux \
+                tuned \
+                w3m \
+                xclip \
+                yarn \
+                zip
+        fi
         print "Done installing packages"
     elif [[ "${response}" =~ [nN] ]]; then
         return
@@ -165,7 +491,8 @@ install_lazygit() {
     [[ ! -d /opt/lazygit ]] && sudo mkdir /opt/lazygit
     curl -s -k https://api.github.com/repos/jesseduffield/lazygit/releases/latest |
         awk '/https:.*Linux_x86_64\.tar\.gz/ {gsub(/"/, ""); print $2}' |
-        sudo wget --no-check-certificate --input-file=- --output-document=/opt/lazygit/lazygit.tar.gz
+        sudo wget --no-check-certificate --input-file=- \
+            --output-document=/opt/lazygit/lazygit.tar.gz
     sudo tar xzf /opt/lazygit/lazygit.tar.gz --directory=/opt/lazygit
     sudo cp /opt/lazygit/lazygit /usr/bin/lazygit
     print "Done installing lazygit"
@@ -185,6 +512,161 @@ install_lazygit_check() {
     else
         install_lazygit
     fi
+}
+
+install_hstr() {
+    if is_apt; then
+        sudo add-apt-repository ppa:ultradvorka/ppa
+        pkg_update_cache
+        pkg_install_list hstr
+        print "Done installing hstr"
+        return
+    fi
+    if sudo "${PACKAGE_MANAGER_CMD}" install -y hstr; then
+        print "Done installing hstr"
+    else
+        printf "%s\n" "Skipping hstr install; package not available for ${PACKAGE_MANAGER}."
+    fi
+}
+
+install_neovim() {
+    if is_apt; then
+        sudo add-apt-repository ppa:neovim-ppa/stable
+        pkg_update_cache
+        pkg_install_list neovim
+        print "Done installing neovim"
+        return
+    fi
+    if sudo "${PACKAGE_MANAGER_CMD}" install -y neovim; then
+        print "Done installing neovim"
+    else
+        printf "%s\n" "Skipping neovim install; package not available for ${PACKAGE_MANAGER}."
+    fi
+}
+
+install_kubectl() {
+    if is_apt; then
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSLo /etc/apt/keyrings/kubernetes-archive-keyring.gpg \
+            https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        echo "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] \
+https://apt.kubernetes.io/ kubernetes-xenial main" |
+            sudo tee /etc/apt/sources.list.d/kubernetes.list 1>/dev/null
+        pkg_update_cache
+        pkg_install_list kubectl
+        print "Done installing kubectl"
+        return
+    fi
+    sudo tee /etc/yum.repos.d/kubernetes.repo 1>/dev/null <<'EOF'
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+       https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+    pkg_update_cache
+    pkg_install_list kubectl
+    print "Done installing kubectl"
+}
+
+install_docker() {
+    if is_apt; then
+        pkg_install_list apt-transport-https ca-certificates curl gnupg lsb-release
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg |
+            sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=$(dpkg --print-architecture) \
+signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" |
+            sudo tee /etc/apt/sources.list.d/docker.list 1>/dev/null
+        pkg_update_cache
+        pkg_install_list \
+            docker-ce \
+            docker-ce-cli \
+            containerd.io \
+            docker-buildx-plugin \
+            docker-compose-plugin
+        print "Done installing Docker"
+        return
+    fi
+    pkg_install_list dnf-plugins-core
+    sudo "${PACKAGE_MANAGER_CMD}" config-manager \
+        --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    pkg_install_list \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-compose-plugin
+    print "Done installing Docker"
+}
+
+install_helm() {
+    if is_apt; then
+        curl https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor \
+            -o /usr/share/keyrings/helm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/helm.gpg] \
+https://baltocdn.com/helm/stable/debian/ all main" |
+            sudo tee /etc/apt/sources.list.d/helm-stable-debian.list 1>/dev/null
+        pkg_update_cache
+        pkg_install_list helm
+        print "Done installing helm"
+        return
+    fi
+    sudo tee /etc/yum.repos.d/helm.repo 1>/dev/null <<'EOF'
+[helm]
+name=Helm
+baseurl=https://baltocdn.com/helm/stable/rpm
+enabled=1
+gpgcheck=1
+gpgkey=https://baltocdn.com/helm/signing.asc
+EOF
+    pkg_update_cache
+    pkg_install_list helm
+    print "Done installing helm"
+}
+
+configure_hashicorp_repo_apt() {
+    curl -kfsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+    sudo apt-add-repository \
+        "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    printf \
+        "%s\n%s\n" \
+        'Acquire::https::apt.releases.hashicorp.com::Verify-Peer "false";' \
+        'Acquire::https::apt.releases.hashicorp.com::Verify-Host "false";' |
+        sudo tee /etc/apt/apt.conf.d/99hashicorp.conf 1>/dev/null
+    pkg_update_cache
+    print "Done installing hashicorp repo"
+}
+
+configure_hashicorp_repo_rpm() {
+    local repo_url
+    repo_url="$(hashicorp_repo_url)"
+    if [[ -z "${repo_url}" ]]; then
+        printf "%s\n" "Skipping hashicorp repo setup; unsupported platform."
+        return
+    fi
+    if [[ "${PACKAGE_MANAGER}" == "dnf" ]]; then
+        sudo dnf install -y dnf-plugins-core
+        sudo dnf config-manager --add-repo "${repo_url}"
+    else
+        sudo yum install -y yum-utils
+        sudo yum-config-manager --add-repo "${repo_url}"
+    fi
+    sudo rpm --import https://rpm.releases.hashicorp.com/gpg
+    pkg_update_cache
+    print "Done installing hashicorp repo"
+}
+
+configure_hashicorp_repo() {
+    if is_apt; then
+        configure_hashicorp_repo_apt
+        return
+    fi
+    configure_hashicorp_repo_rpm
 }
 
 install_external_packages() {
@@ -228,11 +710,7 @@ install_external_packages() {
     while :; do
         read -r -p 'Install hstr? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
-            # From https://github.com/dvorka/hstr/blob/master/INSTALLATION.md#ubuntu
-            sudo add-apt-repository ppa:ultradvorka/ppa
-            sudo apt update
-            sudo apt install -y hstr
-            print "Done installing hstr"
+            install_hstr
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
@@ -242,11 +720,9 @@ install_external_packages() {
     done
 
     while :; do
-        read -r -p 'Install neovim ppa? [y/n]: ' response
+        read -r -p 'Install neovim? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
-            sudo add-apt-repository ppa:neovim-ppa/stable
-            sudo apt update
-            print "Done installing neovim ppa"
+            install_neovim
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
@@ -259,7 +735,9 @@ install_external_packages() {
         read -r -p 'Install tflint? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             # From https://github.com/terraform-linters/tflint#installation
-            curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+            curl -s \
+                https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh |
+                bash
             print "Done installing tflint"
             break
         elif [[ "${response}" =~ [nN] ]]; then
@@ -272,19 +750,7 @@ install_external_packages() {
     while :; do
         read -r -p 'Install hashicorp repo? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
-            # From https://www.hashicorp.com/blog/announcing-the-hashicorp-linux-repository
-            curl -kfsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-            sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-
-            # Disable cert validation.
-            printf \
-                "%s\n%s\n" \
-                'Acquire::https::apt.releases.hashicorp.com::Verify-Peer "false";' \
-                'Acquire::https::apt.releases.hashicorp.com::Verify-Host "false";' |
-                sudo tee /etc/apt/apt.conf.d/99hashicorp.conf 1>/dev/null
-
-            sudo apt update
-            print "Done installing hashicorp repo"
+            configure_hashicorp_repo
             break
         elif [[ "${response}" =~ [nN] ]]; then
             break
@@ -301,9 +767,15 @@ install_pip_packages() {
         print "Installing pip packages"
 
         # Required for ueberzug
-        sudo apt install -y \
-            libx11-dev \
-            libxext-dev
+        if is_apt; then
+            pkg_install_list \
+                libx11-dev \
+                libxext-dev
+        else
+            pkg_install_list \
+                libX11-devel \
+                libXext-devel
+        fi
 
         sudo pip3 \
             --trusted-host pypi.org \
@@ -332,9 +804,13 @@ install_snap_packages() {
     read -r -p 'Install snap packages? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
         print "Installing snap packages"
-        sudo snap install \
-            shfmt
-        print "Done installing snap packages"
+        if command -v snap >/dev/null 2>&1; then
+            sudo snap install \
+                shfmt
+            print "Done installing snap packages"
+        else
+            echo "snap command not found; skipping snap package installs."
+        fi
     elif [[ "${response}" =~ [nN] ]]; then
         return
     else
@@ -353,8 +829,13 @@ install_vim_plug() {
         fi
 
         print "Installing vim-plug"
-        # From https://github.com/junegunn/vim-plug
-        sh -c 'curl -kfLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+        local plug_data_dir
+        local plug_path
+        local plug_url
+        plug_data_dir="${XDG_DATA_HOME:-${HOME}/.local/share}"
+        plug_path="${plug_data_dir}/nvim/site/autoload/plug.vim"
+        plug_url="https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim"
+        curl -kfLo "${plug_path}" --create-dirs "${plug_url}"
         print "Done installing vim-plug"
 
     elif [[ "${response}" =~ [nN] ]]; then
@@ -407,11 +888,19 @@ install_dotfiles() {
 install_i3() {
     read -r -p 'Install and enable i3? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
-        sudo apt install -y \
-            i3-wm \
-            i3-lock \
-            i3-blocks \
-            dunst
+        if is_apt; then
+            pkg_install_list \
+                i3-wm \
+                i3-lock \
+                i3-blocks \
+                dunst
+        else
+            pkg_install_list \
+                i3 \
+                i3lock \
+                i3blocks \
+                dunst
+        fi
         print "Done installing i3"
     elif [[ "${response}" =~ [nN] ]]; then
         return
@@ -426,54 +915,58 @@ remove_packages() {
     read -r -p 'Remove unnecessary packages? [y/n]: ' response
     if [[ "${response}" =~ [yY] ]]; then
         print "Removing packages"
-        sudo apt purge \
-            alsa-topology-conf \
-            alsa-ucm-conf \
-            apport \
-            apport-gtk \
-            apport-symptoms \
-            apt-config-icons-hidpi \
-            aspell \
-            aspell-en \
-            avahi-autoipd \
-            bluez-cups \
-            bluez-obexd \
-            bolt \
-            brltty \
-            chromium-codecs-ffmpeg-extra \
-            eog \
-            gamemode \
-            gedit \
-            gedit-common \
-            gnome-bluetooth \
-            gnome-calculator \
-            gnome-getting-started-docs \
-            gnome-initial-setup \
-            gnome-logs \
-            gnome-online-accounts \
-            gnome-screenshot \
-            gnome-system-monitor \
-            gnome-user-docs \
-            hplip \
-            kerneloops \
-            network-manager-pptp \
-            network-manager-pptp-gnome \
-            openvpn \
-            orca \
-            ppp \
-            pptp-linux \
-            pulseaudio-module-bluetooth \
-            rygel \
-            seahorse \
-            sound-icons \
-            speech-dispatcher \
-            speech-dispatcher-espeak-ng \
-            switcheroo-control \
-            ubuntu-docs \
-            whoopsie \
-            youtube-dl
-        sudo apt autoremove -y
-        print "Done removing packages"
+        if is_apt; then
+            pkg_remove_list \
+                alsa-topology-conf \
+                alsa-ucm-conf \
+                apport \
+                apport-gtk \
+                apport-symptoms \
+                apt-config-icons-hidpi \
+                aspell \
+                aspell-en \
+                avahi-autoipd \
+                bluez-cups \
+                bluez-obexd \
+                bolt \
+                brltty \
+                chromium-codecs-ffmpeg-extra \
+                eog \
+                gamemode \
+                gedit \
+                gedit-common \
+                gnome-bluetooth \
+                gnome-calculator \
+                gnome-getting-started-docs \
+                gnome-initial-setup \
+                gnome-logs \
+                gnome-online-accounts \
+                gnome-screenshot \
+                gnome-system-monitor \
+                gnome-user-docs \
+                hplip \
+                kerneloops \
+                network-manager-pptp \
+                network-manager-pptp-gnome \
+                openvpn \
+                orca \
+                ppp \
+                pptp-linux \
+                pulseaudio-module-bluetooth \
+                rygel \
+                seahorse \
+                sound-icons \
+                speech-dispatcher \
+                speech-dispatcher-espeak-ng \
+                switcheroo-control \
+                ubuntu-docs \
+                whoopsie \
+                youtube-dl
+            sudo apt autoremove -y
+            print "Done removing packages"
+        else
+            echo "Package removal list is Ubuntu-specific; skipping on ${PACKAGE_MANAGER}."
+        fi
     elif [[ "${response}" =~ [nN] ]]; then
         return
     else
@@ -517,7 +1010,8 @@ disable_services() {
         read -r -p 'Disable update notifier? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             if [[ -e /etc/xdg/autostart/update-notifier.desktop ]]; then
-                echo "Hidden=true" | sudo tee -a /etc/xdg/autostart/update-notifier.desktop 1>/dev/null
+                echo "Hidden=true" |
+                    sudo tee -a /etc/xdg/autostart/update-notifier.desktop 1>/dev/null
                 killall update-notifier
             else
                 print "update-notifier.desktop file not present"
@@ -555,7 +1049,8 @@ enable_passwordless_sudo() {
             print "Passwordless sudo already enabled"
             return
         fi
-        printf "%s\n" "${USER}=(ALL) NOPASSWD: ALL" | sudo tee "/etc/sudoers.d/passwordless_sudo_${USER}"
+        printf "%s\n" "${USER}=(ALL) NOPASSWD: ALL" |
+            sudo tee "/etc/sudoers.d/passwordless_sudo_${USER}"
         print "Done configuring passwordless sudo"
 
     elif [[ "${response}" =~ [nN] ]]; then
@@ -630,50 +1125,50 @@ clone_my_repos() {
 
         cd ~ || exit 1
         export GIT_SSL_NO_VERIFY=true
-        clone_repo "git@github.com:takelley1/scripts.git" "scripts"
-        clone_repo "git@github.com:takelley1/notes.git" "notes"
-        clone_repo "git@github.com:takelley1/linux-notes.git" "linux-notes"
+        clone_repo "https://github.com/takelley1/scripts.git" "scripts"
+        clone_repo "https://github.com/takelley1/notes.git" "notes"
+        clone_repo "https://github.com/takelley1/linux-notes.git" "linux-notes"
 
         [[ ! -d ~/repos ]] && mkdir ~/repos
         [[ ! -d ~/roles ]] && mkdir ~/roles
 
         cd ~/roles || exit 1
-        clone_repo "git@github.com:takelley1/ansible-role-postgresql.git" "postgresql"
-        clone_repo "git@github.com:takelley1/ansible-role-nexus.git" "nexus"
-        clone_repo "git@github.com:takelley1/ansible-role-jira-software.git" "jira_software"
-        clone_repo "git@github.com:takelley1/ansible-role-httpd.git" "httpd"
-        clone_repo "git@github.com:takelley1/ansible-role-haproxy.git" "haproxy"
-        clone_repo "git@github.com:takelley1/ansible-role-gitlab-runner.git" "gitlab_runner"
-        clone_repo "git@github.com:takelley1/ansible-role-gitlab.git" "gitlab"
-        clone_repo "git@github.com:takelley1/ansible-role-docker.git" "docker"
-        clone_repo "git@github.com:takelley1/ansible-role-confluence.git" "confluence"
-        clone_repo "git@github.com:takelley1/ansible-role-bitbucket.git" "bitbucket"
-        clone_repo "git@github.com:takelley1/ansible-role-zabbix-proxy.git" "zabbix_proxy"
-        clone_repo "git@github.com:takelley1/ansible-role-users.git" "users"
-        clone_repo "git@github.com:takelley1/ansible-role-trusted-certs.git" "trusted_certs"
-        clone_repo "git@github.com:takelley1/ansible-role-tenablesc.git" "tenablesc"
-        clone_repo "git@github.com:takelley1/ansible-role-sysctl.git" "sysctl"
-        clone_repo "git@github.com:takelley1/ansible-role-stig-rhel-7.git" "stig_rhel_7"
-        clone_repo "git@github.com:takelley1/ansible-role-samba-server.git" "samba_server"
-        clone_repo "git@github.com:takelley1/ansible-role-rsyslog.git" "rsyslog"
-        clone_repo "git@github.com:takelley1/ansible-role-repos.git" "repos"
-        clone_repo "git@github.com:takelley1/ansible-role-repo-mirror.git" "repo_mirror"
-        clone_repo "git@github.com:takelley1/ansible-role-postfix.git" "postfix"
-        clone_repo "git@github.com:takelley1/ansible-role-packages.git" "packages"
-        clone_repo "git@github.com:takelley1/ansible-role-openssh.git" "openssh"
-        clone_repo "git@github.com:takelley1/ansible-role-mcafee-agent.git" "mcafee_agent"
-        clone_repo "git@github.com:takelley1/ansible-role-logrotate.git" "logrotate"
-        clone_repo "git@github.com:takelley1/ansible-role-firewalld.git" "firewalld"
-        clone_repo "git@github.com:takelley1/ansible-role-cron.git" "cron"
-        clone_repo "git@github.com:takelley1/ansible-role-chrony.git" "chrony"
-        clone_repo "git@github.com:takelley1/ansible-role-unix-common.git" "unix_common"
-        clone_repo "git@github.com:takelley1/ansible-role-e2guardian.git" "e2guardian"
-        clone_repo "git@github.com:takelley1/ansible-role-zabbix-server.git" "zabbix_server"
-        clone_repo "git@github.com:takelley1/ansible-role-zabbix-agent.git" "zabbix_agent"
-        clone_repo "git@github.com:takelley1/ansible-role-workstation.git" "workstation"
-        clone_repo "git@github.com:takelley1/ansible-role-podman-services.git" "podman_services"
-        clone_repo "git@github.com:takelley1/ansible-role-dotfiles.git" "dotfiles"
-        clone_repo "git@github.com:takelley1/ansible-role-bootstrap.git" "bootstrap"
+        clone_repo "https://github.com/takelley1/ansible-role-postgresql.git" "postgresql"
+        clone_repo "https://github.com/takelley1/ansible-role-nexus.git" "nexus"
+        clone_repo "https://github.com/takelley1/ansible-role-jira-software.git" "jira_software"
+        clone_repo "https://github.com/takelley1/ansible-role-httpd.git" "httpd"
+        clone_repo "https://github.com/takelley1/ansible-role-haproxy.git" "haproxy"
+        clone_repo "https://github.com/takelley1/ansible-role-gitlab-runner.git" "gitlab_runner"
+        clone_repo "https://github.com/takelley1/ansible-role-gitlab.git" "gitlab"
+        clone_repo "https://github.com/takelley1/ansible-role-docker.git" "docker"
+        clone_repo "https://github.com/takelley1/ansible-role-confluence.git" "confluence"
+        clone_repo "https://github.com/takelley1/ansible-role-bitbucket.git" "bitbucket"
+        clone_repo "https://github.com/takelley1/ansible-role-zabbix-proxy.git" "zabbix_proxy"
+        clone_repo "https://github.com/takelley1/ansible-role-users.git" "users"
+        clone_repo "https://github.com/takelley1/ansible-role-trusted-certs.git" "trusted_certs"
+        clone_repo "https://github.com/takelley1/ansible-role-tenablesc.git" "tenablesc"
+        clone_repo "https://github.com/takelley1/ansible-role-sysctl.git" "sysctl"
+        clone_repo "https://github.com/takelley1/ansible-role-stig-rhel-7.git" "stig_rhel_7"
+        clone_repo "https://github.com/takelley1/ansible-role-samba-server.git" "samba_server"
+        clone_repo "https://github.com/takelley1/ansible-role-rsyslog.git" "rsyslog"
+        clone_repo "https://github.com/takelley1/ansible-role-repos.git" "repos"
+        clone_repo "https://github.com/takelley1/ansible-role-repo-mirror.git" "repo_mirror"
+        clone_repo "https://github.com/takelley1/ansible-role-postfix.git" "postfix"
+        clone_repo "https://github.com/takelley1/ansible-role-packages.git" "packages"
+        clone_repo "https://github.com/takelley1/ansible-role-openssh.git" "openssh"
+        clone_repo "https://github.com/takelley1/ansible-role-mcafee-agent.git" "mcafee_agent"
+        clone_repo "https://github.com/takelley1/ansible-role-logrotate.git" "logrotate"
+        clone_repo "https://github.com/takelley1/ansible-role-firewalld.git" "firewalld"
+        clone_repo "https://github.com/takelley1/ansible-role-cron.git" "cron"
+        clone_repo "https://github.com/takelley1/ansible-role-chrony.git" "chrony"
+        clone_repo "https://github.com/takelley1/ansible-role-unix-common.git" "unix_common"
+        clone_repo "https://github.com/takelley1/ansible-role-e2guardian.git" "e2guardian"
+        clone_repo "https://github.com/takelley1/ansible-role-zabbix-server.git" "zabbix_server"
+        clone_repo "https://github.com/takelley1/ansible-role-zabbix-agent.git" "zabbix_agent"
+        clone_repo "https://github.com/takelley1/ansible-role-workstation.git" "workstation"
+        clone_repo "https://github.com/takelley1/ansible-role-podman-services.git" "podman_services"
+        clone_repo "https://github.com/takelley1/ansible-role-dotfiles.git" "dotfiles"
+        clone_repo "https://github.com/takelley1/ansible-role-bootstrap.git" "bootstrap"
 
     elif [[ "${response}" =~ [nN] ]]; then
         return
@@ -688,29 +1183,123 @@ post_install_message() {
     print "Done!"
     echo "TODO:"
     echo "- Launch nvim and run PlugInstall"
-    if [[ "${add_proxy_response}" =~ [yY] ]]; then
+    if [[ "${add_proxy_response:-}" =~ [yY] ]]; then
         echo "- Add proxy cert and configuration to Firefox"
     fi
 }
 
-add_proxy
+menu_options() {
+    printf "%s\n" \
+        "Add proxy" \
+        "Install packages" \
+        "Install external packages" \
+        "Install EPEL (dnf/yum)" \
+        "Install kubectl" \
+        "Install Docker" \
+        "Install Helm" \
+        "Install pip packages" \
+        "Install snap packages" \
+        "Install vim-plug" \
+        "Install dotfiles" \
+        "Install i3" \
+        "Remove unnecessary packages" \
+        "Disable services" \
+        "Enable passwordless sudo" \
+        "Generate SSH key" \
+        "Clone GitHub repo" \
+        "Clone my repos" \
+        "Show completion notes" \
+        "Quit"
+}
 
-install_packages
-install_external_packages
-install_pip_packages
-install_snap_packages
-install_vim_plug
-install_dotfiles
-install_i3
+render_menu() {
+    local current_index="${1}"
+    local options
+    local index=0
+    clear
+    print "Select an action (arrow keys to move, Enter to run, q to quit)"
+    options="$(menu_options)"
+    while IFS= read -r option; do
+        if [[ "${index}" -eq "${current_index}" ]]; then
+            printf "> %s\n" "${option}"
+        else
+            printf "  %s\n" "${option}"
+        fi
+        index=$((index + 1))
+    done <<<"${options}"
+}
 
-remove_packages
-disable_services
+read_keypress() {
+    local key=""
+    read -rsn1 key
+    if [[ "${key}" == $'\e' ]]; then
+        local rest=""
+        read -rsn2 -t 0.001 rest || true
+        key+="${rest}"
+    fi
+    printf "%s" "${key}"
+}
 
-enable_passwordless_sudo
-generate_ssh_key
-clone_github_repo
-clone_my_repos
+handle_menu_choice() {
+    case "${1}" in
+        0) add_proxy ;;
+        1) install_packages ;;
+        2) install_external_packages ;;
+        3) install_epel ;;
+        4) install_kubectl ;;
+        5) install_docker ;;
+        6) install_helm ;;
+        7) install_pip_packages ;;
+        8) install_snap_packages ;;
+        9) install_vim_plug ;;
+        10) install_dotfiles ;;
+        11) install_i3 ;;
+        12) remove_packages ;;
+        13) disable_services ;;
+        14) enable_passwordless_sudo ;;
+        15) generate_ssh_key ;;
+        16) clone_github_repo ;;
+        17) clone_my_repos ;;
+        18) post_install_message ;;
+        19) exit 0 ;;
+    esac
+}
 
-post_install_message
+run_selected_option() {
+    local selection="${1}"
+    local failed=0
+    local status=0
+    set +e
+    trap 'failed=1' ERR
+    handle_menu_choice "${selection}"
+    status=$?
+    trap - ERR
+    set -e
+    if [[ "${failed}" -eq 1 || "${status}" -ne 0 ]]; then
+        printf "\nStep failed (exit %s). Returning to the menu.\n" "${status}"
+    fi
+    printf "\nPress Enter to return to the menu"
+    read -r
+}
 
-exit 0
+menu_loop() {
+    local options_count
+    local current_index
+    local key
+    options_count="$(menu_options | wc -l | xargs)"
+    current_index=0
+    while :; do
+        render_menu "${current_index}"
+        key="$(read_keypress)"
+        case "${key}" in
+            $'\e[A') current_index=$(( (current_index - 1 + options_count) % options_count )) ;;
+            $'\e[B') current_index=$(( (current_index + 1) % options_count )) ;;
+            ""|$'\n') run_selected_option "${current_index}" ;;
+            q|Q) exit 0 ;;
+        esac
+    done
+}
+
+detect_package_manager
+verify_required_binaries
+menu_loop
