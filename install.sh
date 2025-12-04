@@ -224,6 +224,24 @@ pkg_install_list() {
     esac
 }
 
+is_package_installed() {
+    case "${PACKAGE_MANAGER}" in
+        apt) dpkg -s "${1}" >/dev/null 2>&1 ;;
+        dnf|yum) rpm -q "${1}" >/dev/null 2>&1 ;;
+    esac
+}
+
+filter_missing_packages() {
+    local pkg
+    local filtered=()
+    for pkg in "$@"; do
+        if ! is_package_installed "${pkg}"; then
+            filtered+=("${pkg}")
+        fi
+    done
+    printf "%s\n" "${filtered[@]:-}"
+}
+
 pkg_remove_list() {
     local packages=("$@")
     case "${PACKAGE_MANAGER}" in
@@ -355,129 +373,136 @@ install_packages() {
     read -r -p "Install ${PACKAGE_MANAGER} packages? [y/n]: " response
     if [[ "${response}" =~ [yY] ]]; then
         print "Installing ${PACKAGE_MANAGER} packages"
+        local packages=()
+        if is_apt; then
+            packages=(
+                agrep
+                ansible
+                apt-rdepends
+                autojump
+                bat
+                curl
+                dash
+                feh
+                flake8
+                fzf
+                gcc
+                git
+                bash-completion
+                htop
+                iftop
+                iproute2
+                jq
+                traceroute
+                libmagic-dev
+                lsof
+                diffutils
+                mediainfo
+                mlocate
+                moreutils
+                time
+                net-tools
+                netcat
+                nfs-common
+                nfstrace
+                nfswatch
+                npm
+                p7zip
+                pdfgrep
+                pngcrush
+                findutils
+                python3-isort
+                python3-pip
+                python3-psutil
+                python3-pynvim
+                yq
+                ranger
+                renameutils
+                ripgrep
+                rsync
+                screen
+                shellcheck
+                sloccount
+                fd-find
+                ncdu
+                sshpass
+                strace
+                tcpdump
+                tmux
+                tuned
+                w3m
+                yarn
+                zip
+            )
+        else
+            packages=(
+                agrep
+                ansible
+                autojump
+                bat
+                curl
+                dash
+                feh
+                python3-flake8
+                fzf
+                gcc
+                git
+                bash-completion
+                htop
+                iftop
+                iproute
+                jq
+                traceroute
+                file-devel
+                lsof
+                diffutils
+                mediainfo
+                mlocate
+                moreutils
+                time
+                net-tools
+                nmap-ncat
+                nfs-utils
+                nfstrace
+                nfswatch
+                npm
+                p7zip
+                pdfgrep
+                pngcrush
+                findutils
+                python3-isort
+                python3-pip
+                python3-psutil
+                python3-neovim
+                yq
+                ranger
+                renameutils
+                ripgrep
+                rsync
+                screen
+                ShellCheck
+                sloccount
+                fd-find
+                ncdu
+                sshpass
+                strace
+                tcpdump
+                tmux
+                tuned
+                w3m
+                yarn
+                zip
+            )
+        fi
+        local missing_packages=()
+        read -r -a missing_packages < <(filter_missing_packages "${packages[@]}")
+        if [[ "${#missing_packages[@]}" -eq 0 ]]; then
+            print "All developer tools already installed"
+            return
+        fi
         pkg_update_cache
         pkg_upgrade
-
-        if is_apt; then
-            pkg_install_list \
-                agrep \
-                ansible \
-                apt-rdepends \
-                autojump \
-                bat \
-                curl \
-                dash \
-                feh \
-                flake8 \
-                fzf \
-                gcc \
-                gimp \
-                git \
-                htop \
-                iftop \
-                imagemagick \
-                jq \
-                libmagic-dev \
-                lsof \
-                lxappearance \
-                mediainfo \
-                mlocate \
-                moreutils \
-                mpv \
-                net-tools \
-                netcat \
-                nfs-common \
-                nfstrace \
-                nfswatch \
-                npm \
-                p7zip \
-                pdfgrep \
-                pngcrush \
-                python3-isort \
-                python3-pip \
-                python3-psutil \
-                python3-pynvim \
-                ranger \
-                renameutils \
-                ripgrep \
-                rofi \
-                rsync \
-                rxvt-unicode \
-                screen \
-                scrot \
-                shellcheck \
-                sloccount \
-                sshpass \
-                strace \
-                sxiv \
-                tcpdump \
-                thunar \
-                tmux \
-                tuned \
-                w3m \
-                xclip \
-                yarn \
-                zip
-        else
-            pkg_install_list \
-                agrep \
-                ansible \
-                autojump \
-                bat \
-                curl \
-                dash \
-                feh \
-                python3-flake8 \
-                fzf \
-                gcc \
-                gimp \
-                git \
-                htop \
-                iftop \
-                ImageMagick \
-                jq \
-                file-devel \
-                lsof \
-                lxappearance \
-                mediainfo \
-                mlocate \
-                moreutils \
-                mpv \
-                net-tools \
-                nmap-ncat \
-                nfs-utils \
-                nfstrace \
-                nfswatch \
-                npm \
-                p7zip \
-                pdfgrep \
-                pngcrush \
-                python3-isort \
-                python3-pip \
-                python3-psutil \
-                python3-neovim \
-                ranger \
-                renameutils \
-                ripgrep \
-                rofi \
-                rsync \
-                rxvt-unicode \
-                screen \
-                scrot \
-                ShellCheck \
-                sloccount \
-                sshpass \
-                strace \
-                sxiv \
-                tcpdump \
-                thunar \
-                tmux \
-                tuned \
-                w3m \
-                xclip \
-                yarn \
-                zip
-        fi
+        pkg_install_list "${missing_packages[@]}"
         print "Done installing packages"
     elif [[ "${response}" =~ [nN] ]]; then
         return
@@ -528,6 +553,10 @@ install_lazygit_check() {
 }
 
 install_hstr() {
+    if command -v hstr >/dev/null 2>&1; then
+        print "hstr already installed"
+        return
+    fi
     if is_apt; then
         sudo add-apt-repository ppa:ultradvorka/ppa
         pkg_update_cache
@@ -543,6 +572,10 @@ install_hstr() {
 }
 
 install_neovim() {
+    if command -v nvim >/dev/null 2>&1; then
+        print "Neovim already installed"
+        return
+    fi
     if is_apt; then
         sudo add-apt-repository ppa:neovim-ppa/stable
         pkg_update_cache
@@ -593,6 +626,10 @@ EOF
 }
 
 install_kubectl() {
+    if command -v kubectl >/dev/null 2>&1; then
+        print "kubectl already installed"
+        return
+    fi
     if is_apt; then
         install_kubectl_apt
         return
@@ -601,6 +638,10 @@ install_kubectl() {
 }
 
 install_docker() {
+    if command -v docker >/dev/null 2>&1; then
+        print "Docker already installed"
+        return
+    fi
     if is_apt; then
         pkg_install_list apt-transport-https ca-certificates curl gnupg lsb-release
         sudo mkdir -p /etc/apt/keyrings
@@ -633,6 +674,10 @@ https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" |
 }
 
 install_helm() {
+    if command -v helm >/dev/null 2>&1; then
+        print "Helm already installed"
+        return
+    fi
     local helm_script="/tmp/get_helm.sh"
     curl -fsSL -o "${helm_script}" \
         https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4
@@ -698,6 +743,10 @@ install_external_packages() {
     done
 
     while :; do
+        if command -v lf >/dev/null 2>&1; then
+            print "lf already installed"
+            break
+        fi
         read -r -p 'Install lf? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             [[ ! -d /opt/lf ]] && sudo mkdir /opt/lf
@@ -723,6 +772,10 @@ install_external_packages() {
     done
 
     while :; do
+        if command -v hstr >/dev/null 2>&1; then
+            print "hstr already installed"
+            break
+        fi
         read -r -p 'Install hstr? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             install_hstr
@@ -735,6 +788,10 @@ install_external_packages() {
     done
 
     while :; do
+        if command -v nvim >/dev/null 2>&1; then
+            print "Neovim already installed"
+            break
+        fi
         read -r -p 'Install neovim? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             install_neovim
@@ -747,6 +804,10 @@ install_external_packages() {
     done
 
     while :; do
+        if command -v tflint >/dev/null 2>&1; then
+            print "tflint already installed"
+            break
+        fi
         read -r -p 'Install tflint? [y/n]: ' response
         if [[ "${response}" =~ [yY] ]]; then
             # From https://github.com/terraform-linters/tflint#installation
