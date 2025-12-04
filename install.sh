@@ -185,21 +185,26 @@ pkg_upgrade() {
 pkg_install_list() {
     local packages=("$@")
     local pkg
+    local install_status=0
     for pkg in "${packages[@]}"; do
         case "${PACKAGE_MANAGER}" in
             apt)
-                if ! sudo apt install -y "${pkg}"; then
-                    echo "Skipping unavailable package: ${pkg}"
+                if sudo apt install -y "${pkg}"; then
+                    continue
                 fi
+                echo "Skipping unavailable package: ${pkg}"
+                install_status=1
                 ;;
             dnf|yum)
-                if ! sudo "${PACKAGE_MANAGER_CMD}" install -y "${pkg}"; then
-                    echo "Skipping unavailable package: ${pkg}"
+                if sudo "${PACKAGE_MANAGER_CMD}" install -y "${pkg}"; then
+                    continue
                 fi
+                echo "Skipping unavailable package: ${pkg}"
+                install_status=1
                 ;;
         esac
     done
-    return 0
+    return "${install_status}"
 }
 
 is_package_installed() {
@@ -476,14 +481,15 @@ install_packages() {
         read -r -a missing_packages < <(filter_missing_packages "${packages[@]}")
         if [[ "${#missing_packages[@]}" -eq 0 ]]; then
             print "All developer tools already installed"
-            return
+            return 0
         fi
         pkg_update_cache
         pkg_upgrade
         pkg_install_list "${missing_packages[@]}"
         print "Done installing packages"
+        return 0
     elif [[ "${response}" =~ [nN] ]]; then
-        return
+        return 0
     else
         echo "Enter y or n"
         install_packages
