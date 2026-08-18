@@ -1,0 +1,210 @@
+INSTRUCTIONS FOR AUTONOMOUS SYSTEMS ENGINEERING AGENT: DEPLOYING AUSTIN KELLEY'S WORKSPACE
+
+You are an advanced systems engineering agent. Your objective is to provision and configure
+a pristine development environment on any modern Linux distribution (such as Rocky, RHEL,
+Debian, Ubuntu, Fedora, or Arch) to perfectly match Austin Kelley's highly customized workspace.
+Always prefer the latest stable release of all runtimes, packages, and custom utilities.
+
+Please execute the following steps sequentially, verifying successful setup of each block.
+
+1. DOTFILES BARE GIT REPOSITORY SETUP (~/.cfg)
+   - Initialize and configure the bare git repository tracking dotfiles:
+     git clone --bare <repository-url> $HOME/.cfg
+   - Map the dot command to manage the home directory work-tree:
+     alias dot='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
+   - Configure local settings to prevent listing all non-dotfiles:
+     dot config --local status.showUntrackedFiles no
+   - Configure Git identities: Set global user details for standard work, but local user
+     details for the bare dotfiles repository (e.g. personal email for personal configs).
+   - Configure the following bare repo aliases in ~/.bashrc:
+     * d='dot'
+     * ds='dot status --untracked-files=no'
+     * dt='dot ls-tree -r master --name-only'
+     * drs='dot restore --staged'
+     * dL='dot log --graph --oneline --full-history --abbrev-commit --all'
+     * dl='lazygit -g $HOME/.cfg/ -w $HOME' (Target dotfiles bare repo in Lazygit)
+   - Add the automated Agent Guard at the top of ~/.bashrc to prevent loops under CLI agents:
+     ```bash
+     if [[ "${DEVIN_CLI}" == "1" ]]; then
+         return
+     fi
+     ```
+   - Checkout tracked files to $HOME, resolving any existing directory file conflicts.
+
+2. SYSTEM SERVICES HARDENING AND PURGING (DISTRO-AGNOSTIC)
+   - Stop, disable, and purge the following background services to prevent container process
+     locking, resource consumption, or path blockages, translating service names to match the
+     host distribution (using systemd systemctl, openrc, or init):
+     * fapolicyd (File Access Policy Daemon)
+     * rsyslog (Rsyslog logging daemon)
+     * cups (Common Unix Printing System - e.g. cups, cupsd, or cups.service)
+     * wpa_supplicant (Wireless daemon - e.g. wpa_supplicant, wpa-supplicant, or wpasupplicant)
+     * ModemManager (Mobile broadband manager - e.g. ModemManager or modemmanager)
+   - Disable update-notifier desktop alerts if a GUI is active:
+     * For GNOME/XDG: echo "Hidden=true" | sudo tee -a /etc/xdg/autostart/update-notifier.desktop
+
+3. SYSTEM-WIDE NETWORK PROXIES AND SSH ROUTING (SANITIZED CONFIG)
+   - Set up the corporate HTTP proxy variables via /etc/profile.d/proxy.sh:
+     http_proxy=http://proxy.internal:80
+     https_proxy=${http_proxy}
+     HTTP_PROXY=${http_proxy}
+     HTTPS_PROXY=${http_proxy}
+   - Mirror definitions inside /etc/environment.d/00proxy.conf and the native package manager
+     configs (e.g. /etc/dnf/dnf.conf, /etc/yum.conf, or /etc/apt/apt.conf.d/) as appropriate.
+   - Setup SSH tunneling configs inside ~/.ssh/config to proxy traffic through port 443:
+     Host github.com
+         HostName ssh.github.com
+         Port 443
+         User git
+         ProxyCommand ncat --proxy proxy.internal:80 --proxy-type http %h %p
+   - Deploy the custom socket bridge script ~/.ssh/proxy_tunnel.py to manage connection routing.
+
+4. DISTRO-AGNOSTIC COMPILER TOOLCHAINS & DEVELOPMENT RUNTIMES
+   - Install all runtime managers via standardized, distro-agnostic installers rather than OS
+     package managers to ensure consistent binary versions across different Linux distributions:
+     * **Go**: Install via official tarball binary release to /usr/local/go (latest stable Go).
+     * **Rust**: Install via the official `rustup` script, adding Cargo and the stable toolchain.
+     * **Python & uv**:
+       - Install `uv` and `uvx` package managers in ~/.local/bin/ via curl (always latest).
+       - Pull and cache the latest stable Python runtimes using `uv python install`.
+       - Configure pip alias in ~/.bashrc with air-gapped trusted-host exceptions:
+         alias pip='pip --trusted-host pypi.org --trusted-host pypi.python.org ...'
+     * **Node.js**: Install the latest stable Node.js and Npm globally via fnm, nvm, or official
+       precompiled binaries.
+     * **Ansible**: Install the latest stable Ansible-core inside an isolated `uv` tool environment
+       and populate its essential collections (AWS, MariaDB, MySQL, Posix, Community.General).
+       - Add Ansible shorthand in ~/.bashrc:
+         ap() { ansible-playbook --diff "$@"; }
+
+5. SYSTEM PACKAGES SUMMARY (CROSS-DISTRIBUTION TRANS-COMPILATION)
+   - Ensure equivalent utility packages are present on the host distribution. The agent must
+     map package names to match the active package manager (DNF/APT/Pacman/Yum/APK/Zypper):
+     * **System Build Tools**: gcc, g++, make, cmake, readline development headers, freetype
+       development headers, OpenGL/Mesa development headers, X11/Xft development headers
+     * **Networking/DNS**: nmap, ncat, git, gh (GitHub CLI), samba client, cifs-utils, dnsutils
+       (dig/nslookup), gnutls utilities, ipsec VPN tools (libreswan or strongswan)
+     * **GUI/Clipboard Server**: xrdp, xorgxrdp, xclip, xsel, keepassxc
+     * **Security/Audit**: AIDE, audit dispatcher plugins, usbguard, OpenSCAP scanner, NSS tools,
+       openssl-pkcs11, SCAP security guides
+     * **Modern Replacements**: bat, eza, ripgrep, fd-find, duf, htop, tokei (Aliased in bash)
+     * **Utilities**: ShellCheck, yq, jq, atuin, autojump, iftop, mediainfo, ncdu, lsof, mlocate,
+       moreutils, time, screen, tmux, tuned, w3m, zip, p7zip, pdfgrep, pngcrush, rsync, s-nail,
+       dosfstools, efibootmgr, sshpass, strace, tcpdump, traceroute, wget, chrony, lvm2
+   - Establish a daily cron job or systemd timer to automatically run `updatedb` (mlocate) and
+     compile a localized search file database at ~/.locatedb for instant file navigations.
+
+6. PERFORMANCE OPTIMIZATIONS (TUNED & SYSCTL)
+   - If Tuned is supported by the host, enable and select the high-performance profile:
+     sudo tuned-adm profile throughput-performance
+   - Apply the following sysctl kernel tweaks for performance and filesystem watchers (written to
+     /etc/sysctl.conf or a dedicated config under /etc/sysctl.d/):
+     * fs.file-max = 2097152 (Increase max open files)
+     * fs.inotify.max_user_watches = 524288 (Increase workspace watcher limit)
+     * fs.inotify.max_user_instances = 8192
+     * vm.max_map_count = 262144 (Required for Elasticsearch and Java engines)
+     * vm.dirty_background_ratio = 5
+     * vm.dirty_ratio = 10
+     * net.core.somaxconn = 32768 (Increase socket connection backlog)
+     * net.ipv4.tcp_max_syn_backlog = 16384
+     * net.core.rmem_max = 16777216
+     * net.core.wmem_max = 16777216
+
+7. LOCAL SPACE UTILITIES & FLUX CD
+   - **Flux CD**: Download and install latest stable Flux CLI to `/usr/local/bin/flux`.
+   - **Ranger**: Configure custom `ranger_cd` to sync CWD on exit, mapped as `alias r='ranger_cd'`,
+     with the following shell function:
+     ```bash
+     ranger_cd() {
+         local temp_file="$(mktemp -t "ranger_cd.XXXXXXXXXX")"
+         ranger --choosedir="$temp_file" -- "${@:-$PWD}"
+         if chosen_dir="$(cat -- "$temp_file")" &&
+             [[ -n "$chosen_dir" ]] &&
+             [[ "$chosen_dir" != "$PWD" ]]; then
+             cd -- "$chosen_dir" || exit 1
+         fi
+         rm -f -- "$temp_file"
+     }
+     ```
+   - **Telepresence**: Install the latest stable Telepresence client inside /usr/local/bin/.
+   - **Coder CLI**: Install the `coder` workspace management binary in `/usr/local/bin/`.
+   - **Ahmetb's Plugins**: Install `kubectl-ctx` and `kubectl-ns` under ~/.local/bin/ to allow
+     the native commands `kubectl ctx` and `kubectl ns`.
+
+8. BASH PROMPT INTEGRATIONS
+   - Define custom `get_kube_context()` prompt utility:
+     * Read ~/.kube/config directly using grep and awk if KUBECONFIG is empty.
+     * Fallback to executing `kubectl config current-context` if KUBECONFIG is set.
+     * Compute name hash of context via `cksum` and map to a vibrant 256-color index.
+     * Wrap escapes inside \001 and \002 markers to prevent terminal wrapping bugs.
+     * Output context surrounded by Cyan brackets: [CONTEXT].
+   - Configure the primary prompt PS1 using dynamic command substitution:
+     PS1="${user_and_host}${colon_separator}${current_dir}${text_color}\$ \$(get_kube_context)"
+   - Configure kubectl aliases and autocomplete:
+     * alias k='kubectl'
+     * complete -o default -F __start_kubectl k
+
+9. CONTAINER ENGINE & PRIVATE REGISTRY CREDENTIALS
+   - Map container configurations (such as storage, overlay, and network configs) for Podman
+     or Docker as appropriate.
+   - Populate ~/.docker/config.json with credentials for private air-gapped registries:
+     docker-registry.internal, docker-staging.internal, etc.
+
+10. EDITOR CONFIGURATION (NEOVIM & VIM-PLUG)
+   - Boot Neovim under /home/akelley/.config/nvim/ using the `vim-plug` manager.
+   - Install vim-plug via curl:
+     curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
+       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+   - Use the colorscheme Drewtempelmeyer's `palenight.vim` with turquoise overrides.
+   - Configure Vim-Plug to load the complete stack of active workspace plugins (always latest):
+     * neovim/nvim-lspconfig (Language Server Protocol config client)
+     * lewis6991/gitsigns.nvim (Lua-based git status editor margins tracker)
+     * ms-jpq/coq_nvim (COQ fast completion engine) & ms-jpq/coq.artifacts & coq.thirdparty
+     * dense-analysis/ale (ALE linting and fixing engine)
+     * hashivim/vim-terraform (HashiCorp Terraform syntax support)
+     * voldikss/vim-floaterm (Floating terminal windows)
+     * preservim/nerdcommenter (Leader commenting blocks)
+     * kassio/neoterm (Python interactive split REPL)
+     * tmhedberg/SimpylFold (Better python code folding)
+     * kdheepak/lazygit.nvim (Vim lazygit split)
+     * ntpeters/vim-better-whitespace (Remove and strip trailing whitespaces)
+     * tpope/vim-obsession (Continuous session saving)
+     * tpope/vim-surround (Word surrounding wrappers)
+     * Konfekt/FastFold (Performance optimized folds)
+     * pearofducks/ansible-vim (Ansible syntax highlighting)
+     * ekalinin/Dockerfile.vim (Docker syntax)
+     * gcmt/taboo.vim (Tab renaming manager)
+     * jiangmiao/auto-pairs (Brackets autopairing)
+     * mbbill/undotree (Visual undo branch history viewer)
+     * machakann/vim-highlightedyank (Highlights yanks)
+     * vim-airline/vim-airline & vim-airline-themes (Top/bottom info status bars)
+     * kevinhwang91/rnvimr (Floating ranger inside Neovim split window)
+   - Configure Vim autocommands:
+     * CdToGitRoot on write.
+     * DeleteHiddenBuffers sweep.
+     * Cursor changes to bar in Insert mode, block in Normal mode.
+   - Apply custom leader-key maps (Leader is `,`):
+     * Resize window splits via leader + arrow keys or Alt + arrows.
+     * Edit/source vimrc via `,ve` and `,vs`.
+     * Save buffer via `,w`.
+
+11. NEOVIM CLIPBOARD AND BUFFER SYNCHRONIZATION INSIDE TMUX
+   - Ensure clipboard operations and buffer syncing work seamlessly within TMUX windows.
+   - Add the following dynamic clip helper block inside init.vim to synchronize xclip/xsel with
+     the active TMUX-passed DISPLAY variable:
+     ```vim
+     if exists('$TMUX')
+       let s:cmd = 'env DISPLAY=$(tmux show-environment DISPLAY | cut -d= -f2-) xclip'
+       let g:clipboard = {
+             \   'name': 'tmux-xclip',
+             \   'copy': {
+             \      '+': ['sh', '-c', s:cmd . ' -i -selection clipboard'],
+             \      '*': ['sh', '-c', s:cmd . ' -i -selection primary'],
+             \    },
+             \   'paste': {
+             \      '+': ['sh', '-c', s:cmd . ' -o -selection clipboard'],
+             \      '*': ['sh', '-c', s:cmd . ' -o -selection primary'],
+             \   },
+             \   'cache_enabled': 1,
+             \ }
+     endif
+     ```
